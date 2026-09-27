@@ -39,7 +39,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.27</h1>
+<h1>GPC Ecosystem Simulator — v0.27.1</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -376,7 +376,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.27",
+   version:"v0.27.1",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -580,6 +580,7 @@ function renderEditors(full=true){
    ${field("Name","name",s.name,"text")}
    ${field("Starting population","pop",round(s.startPop ?? s.pop))}
    <label><span>Species type</span><select data-k="type"><option value="consumer" ${producer?"":"selected"}>Consumer</option><option value="producer" ${producer?"selected":""}>Producer</option></select></label>
+   <label><span>Invasive species</span><span style="display:flex;align-items:center;gap:8px;min-height:38px"><input data-k="invasive" type="checkbox" style="width:auto" ${s.invasive?"checked":""}> Is invasive</span></label>
    ${producer ? `
      ${field("Carrying capacity","capacity",s.capacity ?? 0)}
      ${field("Annual regrowth % of capacity","regrowth",s.regrowth ?? 600)}
