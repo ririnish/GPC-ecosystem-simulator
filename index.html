@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.18</h1>
+<h1>GPC Ecosystem Simulator — v0.19</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -92,7 +92,11 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="graphSpeciesFilter" class="filter-chips"></div></div>
  <canvas id="chart"></canvas>
- <p class="note">Choose graph species here. Use the shared Analysis Range above to zoom the graph; diagnostics only render after an explicit From/To range is set.</p>
+ <div class="graph-controls" style="margin-top:12px">
+  <label><span>Average population — start in year</span><input id="averageStartYear" type="number" min="0" step="1" value="25" oninput="renderPopulationAverages()"></label>
+ </div>
+ <div id="populationAverages"></div>
+ <p class="note">Average Population uses annual population snapshots from the selected start year through the latest simulated year, letting you exclude the initial transient spike. Choose graph species here independently; the average includes all species.</p>
  </div>
 </div>
 
@@ -150,7 +154,7 @@ function resetSim(keep=false){
    s.pop=s.startPop;
  });
  year=0; history=[snapshot()]; lastStats={};
- renderEditors(); renderState(); draw(); renderDiagnostics(); renderYearlyDiagnostics();
+ renderEditors(); renderState(); draw(); renderPopulationAverages(); renderDiagnostics(); renderYearlyDiagnostics();
 }
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
 function rnd(a,b){return a+Math.random()*(b-a)}
@@ -437,9 +441,9 @@ function renderYearlyDiagnostics(){
  rows.forEach(r=>h+=`<tr><td>${r.year}</td><td>${r.species}</td><td>${f(r.start)}</td><td>${f(r.end)}</td><td>${r.foodPct==null?'—':Math.round(r.foodPct)+'%'}</td><td>${f(r.predDeaths)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td></tr>`);
  d.innerHTML=h+'</tbody></table>';
 }
-function analysisRangeChanged(){draw();renderDiagnostics();renderYearlyDiagnostics();renderState();}
+function analysisRangeChanged(){draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();renderState();}
 
-function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderDiagnostics();renderYearlyDiagnostics()}
+function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics()}
 
 function sync(){
  document.querySelectorAll(".species").forEach((d,i)=>{
@@ -584,7 +588,7 @@ function autoBalance(){
  // overshoot it into Abundant/Overpopulated states.
  species.forEach(sp=>{sp.expectedPop=Math.max(0,sp.startPop);});
  year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
- renderEditors();renderState();draw();renderDiagnostics();renderYearlyDiagnostics();
+ renderEditors();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 
  let lines=["Calculated from "+anchorName+" = "+fmt(anchorPop)+"."];
  species.forEach((sp,i)=>{if(required[i]>0||i===anchorIndex)lines.push(sp.name+": "+fmt(sp.startPop)+" starting individuals")});
@@ -625,6 +629,25 @@ function showSingleYear(){
  document.getElementById("graphFrom").value=y;document.getElementById("graphTo").value=y;analysisRangeChanged();
 }
 
+function renderPopulationAverages(){
+ const out=document.getElementById("populationAverages"); if(!out)return;
+ const input=document.getElementById("averageStartYear");
+ let start=input&&input.value!==""?Math.max(0,parseInt(input.value,10)||0):0;
+ const data=history.filter(r=>r.year>=start);
+ if(!data.length){
+   out.innerHTML=`<p class="note">No population history at or after year ${start}. Run more years or choose an earlier start year.</p>`;
+   return;
+ }
+ const last=data[data.length-1].year;
+ const rows=species.map(s=>{
+   let sum=0,count=0;
+   data.forEach(r=>{const v=Number(r[s.name]);if(Number.isFinite(v)){sum+=v;count++;}});
+   const avg=count?sum/count:0;
+   return `<tr><td>${escapeHtml(s.name)}</td><td>${fmt(avg)}</td></tr>`;
+ }).join("");
+ out.innerHTML=`<p class="note">Average from year ${start} through year ${last} (${data.length} annual snapshots).</p><div class="table-wrap"><table><thead><tr><th>Species</th><th>Average Population</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 function draw(){
  const c=document.getElementById("chart"),ctx=c.getContext("2d");
  const dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);
@@ -657,7 +680,7 @@ function draw(){
  ctx.fillStyle="#657069";ctx.fillText("0",5,h-padB+4);ctx.fillText(Math.round(max).toLocaleString(),5,padT+4);
 }
 window.addEventListener("resize",draw);
-species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderDiagnostics();renderYearlyDiagnostics();
+species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
 </html>
