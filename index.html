@@ -39,7 +39,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.28</h1>
+<h1>GPC Ecosystem Simulator — v0.29</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -51,7 +51,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
   <button onclick="exportSimulation()">Export simulation</button>
   <button onclick="resetSim()">Reset</button>
  </div>
- <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. Native Expected Population is estimated from the mature pre-invasion ecosystem, and native Starting Population is set to that baseline. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For animal prey below that healthy reference, encounterability declines in proportion to current/expected abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
+ <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.88rem"><input id="includeInvasives" type="checkbox" style="width:auto" checked onchange="toggleInvasiveSimulation()"> Include invasive species in simulation</label>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. The run-controls checkbox can include or exclude all invasive species from simulation; turning it on explicitly introduces them at their authored Starting Population at the current year, while turning it off removes them from active simulation. Native Expected Population is estimated from the mature pre-invasion ecosystem, and native Starting Population is set to that baseline. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For animal prey below that healthy reference, encounterability declines in proportion to current/expected abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
 </div>
 
 <div class="card">
@@ -176,14 +177,14 @@ function step(){
  // be hunted, and die beginning the next month instead of materializing in one
  // year-end pulse. The breeding pool is frozen at the start of the year so those
  // newborns do not increase reproductive eligibility until the following year.
- const annualBreedingPool=species.map(sp=>Math.max(0,sp.pop));
+ const annualBreedingPool=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:Math.max(0,sp.pop));
  for(let month=0;month<12;month++)stepMonth(annualBreedingPool,month+1);
  year++;
  history.push(snapshot());
 }
 
 function stepMonth(annualBreedingPool,monthNo){
- const dt=1/12,start=species.map(sp=>Math.max(0,sp.pop));
+ const dt=1/12,start=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:Math.max(0,sp.pop));
  const obtained=new Array(species.length).fill(0),preyLossKg=new Array(species.length).fill(0);
  ensureSpeciesIds();
  const monthDiag=species.map((sp,i)=>({year:year+1,month:monthNo,speciesId:sp.id,species:sp.name,start:start[i],predDeaths:0,postPred:0,foodRequired:0,foodObtained:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,end:0}));
@@ -303,6 +304,7 @@ function stepMonth(annualBreedingPool,monthNo){
  // PHASE D/E: natural mortality, starvation/reproductive eligibility, births/regrowth.
  species.forEach((sp,i)=>{
    lastStats[i]??={births:0,natural:0,predation:0,starve:0,food:0,eligible:0};
+   if(sp.invasive&&!invasivesEnabled()){sp.pop=0;monthDiag[i].end=0;return;}
    const base=afterFeeding[i];
    const natural=sp.lifespan>0?Math.min(base,base/sp.lifespan*dt):0;
    let alive=Math.max(0,base-natural);lastStats[i].natural+=natural;monthDiag[i].naturalDeaths=natural;
@@ -376,7 +378,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.28",
+   version:"v0.29",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -494,6 +496,16 @@ function renderYearlyDiagnostics(){
 }
 function analysisRangeChanged(){draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();renderState();}
 
+function invasivesEnabled(){const el=document.getElementById("includeInvasives");return !el||el.checked}
+function toggleInvasiveSimulation(){
+ sync();
+ const enabled=invasivesEnabled();
+ species.forEach(sp=>{if(sp.invasive)sp.pop=enabled?Math.max(0,sp.startPop):0});
+ // Treat the toggle as an explicit introduction/removal event at the current year.
+ // Replace the current-year snapshot so graphs/state immediately reflect the choice.
+ if(history.length)history[history.length-1]=snapshot();
+ renderState();draw();renderPopulationAverages();
+}
 function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics()}
 
 function sync(){
