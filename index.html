@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.20</h1>
+<h1>GPC Ecosystem Simulator — v0.21</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -457,6 +457,11 @@ function sync(){
    };
    sp.name=String(val("name",sp.name));
    sp.startPop=Math.max(0,val("pop",sp.startPop ?? sp.pop));
+   if(get("type"))sp.type=String(val("type",sp.type ?? (sp.survival<=0?"producer":"consumer")));
+   // Species type is explicit. Keep survival=0 as the simulation's producer flag;
+   // consumers receive a usable default if converted from a producer.
+   if(sp.type==="producer")sp.survival=0;
+   else if(!(sp.survival>0))sp.survival=40;
    // Only update properties whose controls exist for this species type.
    if(get("capacity"))sp.capacity=Math.max(0,val("capacity",sp.capacity ?? 0));
    if(get("regrowth"))sp.regrowth=Math.max(0,val("regrowth",sp.regrowth ?? 600));
@@ -471,7 +476,7 @@ function sync(){
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push({name:"New Species",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
 function delSpecies(i){sync();species.splice(i,1);renderEditors();refreshDiagnosticSpeciesFilters();resetSim(true)}
 
 function renderEditors(full=true){
@@ -482,10 +487,12 @@ function renderEditors(full=true){
  root.innerHTML="";
  species.forEach((s,i)=>{
   let d=document.createElement("div");d.className="species";
-  const producer=s.survival<=0;
+  if(!s.type)s.type=(s.survival<=0?"producer":"consumer");
+  const producer=s.type==="producer";
   d.innerHTML=`<div class="grid">
    ${field("Name","name",s.name,"text")}
    ${field("Starting population","pop",round(s.startPop ?? s.pop))}
+   <label><span>Species type</span><select data-k="type"><option value="consumer" ${producer?"":"selected"}>Consumer</option><option value="producer" ${producer?"selected":""}>Producer</option></select></label>
    ${producer ? `
      ${field("Carrying capacity","capacity",s.capacity ?? 0)}
      ${field("Annual regrowth % of capacity","regrowth",s.regrowth ?? 600)}
@@ -507,6 +514,7 @@ function renderEditors(full=true){
   </div>`;
   root.appendChild(d);
  });
+ root.querySelectorAll('[data-k="type"]').forEach(sel=>sel.addEventListener("change",()=>{sync();renderEditors();refreshDiagnosticSpeciesFilters();}));
  refreshAnchor();
  refreshGraphSpeciesFilter();
 }
