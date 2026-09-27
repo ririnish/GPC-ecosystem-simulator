@@ -39,7 +39,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.33</h1>
+<h1>GPC Ecosystem Simulator — v0.34</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -179,6 +179,7 @@ function resetSim(keep=false){
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
 function rnd(a,b){return a+Math.random()*(b-a)}
 function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
+let continuousCalibration=false;
 
 function step(){
  sync();
@@ -360,7 +361,7 @@ function stepMonth(annualBreedingPool,monthNo){
      // Continuous math is useful internally, but a real consumer population cannot
      // contain a fraction of one organism. Crossing below one individual is extinction.
      // Extinction is absorbing unless a future explicit reintroduction mechanic changes it.
-     if(sp.pop>0 && sp.pop<1)sp.pop=0;
+     if(!continuousCalibration && sp.pop>0 && sp.pop<1)sp.pop=0;
    }else{
      let growth=0;
      if(sp.capacity>0){
@@ -390,7 +391,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.33",
+   version:"v0.34",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -709,19 +710,19 @@ function autoBalance(){
  species.forEach(sp=>{if(!sp.invasive)sp.expectedPop=Math.max(0,sp.startPop);});
  const nativeSeed=species.map(sp=>sp.invasive?0:Math.max(0,sp.startPop));
 
- // Expected Population participates in prey encounterability, so it must be
- // solved as a fixed point rather than updated a fixed number of times.
- // Calibration repeatedly asks: if this Expected vector governs encounterability,
- // does the mature native ecosystem reproduce essentially the same Expected vector?
+ // Expected Population participates in prey encounterability, so solve it as
+ // a fixed point. During mathematical calibration ONLY, consumer populations remain
+ // continuous below 1 so the solver can discover viable trophic ratios before scaling.
  const oldRD=renderDiagnostics,oldRY=renderYearlyDiagnostics;
  renderDiagnostics=()=>{};renderYearlyDiagnostics=()=>{};
 
  const CALIBRATION_YEARS=500;
  const TAIL_START=401;
- const CONVERGENCE_TOLERANCE=0.01; // numerical solver tolerance: 1% relative change
- const MAX_CALIBRATION_PASSES=25;  // safety guard only; failure is reported, never hidden
+ const CONVERGENCE_TOLERANCE=0.01; // numerical solver tolerance, not an ecological rule
+ const MAX_CALIBRATION_PASSES=25;  // safety guard
  let calibrationPasses=0,converged=false,maxRelativeChange=Infinity;
 
+ continuousCalibration=true;
  for(let pass=0;pass<MAX_CALIBRATION_PASSES;pass++){
    const expectedUsed=species.map(sp=>sp.invasive?0:Math.max(0,sp.expectedPop||0));
    species.forEach((sp,i)=>{sp.pop=sp.invasive?0:nativeSeed[i];});
@@ -747,10 +748,33 @@ function autoBalance(){
    if(maxRelativeChange<=CONVERGENCE_TOLERANCE){converged=true;break;}
  }
 
- // CRITICAL: the final verification run uses the converged Expected vector and DOES
- // NOT update it afterward. This guarantees that Year 0 is handed off under exactly
- // the same encounterability rules that produced the verified healthy trajectory.
+ // One final CONTINUOUS burn-in under the frozen solved Expected vector establishes
+ // a living mathematical state. Expected is not changed after this point.
  species.forEach((sp,i)=>{sp.pop=sp.invasive?0:nativeSeed[i];});
+ year=0;history=[snapshot()];diagnosticRows=[];lastStats={};
+ for(let y=0;y<CALIBRATION_YEARS;y++)step();
+ const continuousFinalPop=species.map(sp=>sp.invasive?0:Math.max(0,sp.pop));
+
+ // Scale the solved ecosystem BEFORE real-rule verification. This is where the
+ // designer's anchor becomes physical: the anchor's Expected Population is exactly
+ // the authored value, and all native populations/capacities scale by the same factor.
+ const equilibriumAnchor=Math.max(0,species[anchorIndex]?.expectedPop||0);
+ const equilibriumScale=equilibriumAnchor>0 ? anchorPop/equilibriumAnchor : 1;
+ species.forEach((sp,i)=>{
+   if(sp.invasive){
+     sp.startPop=invasiveStarts[i]??0;
+     sp.expectedPop=sp.startPop;
+     sp.pop=0;
+   }else{
+     sp.expectedPop=Math.max(0,sp.expectedPop*equilibriumScale);
+     sp.pop=Math.max(0,continuousFinalPop[i]*equilibriumScale);
+     if(sp.survival<=0 && (sp.capacity||0)>0)sp.capacity*=equilibriumScale;
+   }
+ });
+
+ // REAL-RULE VERIFICATION: restore the physical <1 extinction floor and run the
+ // scaled ecosystem with Expected frozen. This is the trajectory gameplay must support.
+ continuousCalibration=false;
  year=0;history=[snapshot()];diagnosticRows=[];lastStats={};
  for(let y=0;y<CALIBRATION_YEARS;y++)step();
 
@@ -766,11 +790,9 @@ function autoBalance(){
    return Math.abs(actual-expected)/Math.max(1,expected,actual);
  });
  const maxVerificationDrift=Math.max(0,...verificationDrift);
+ const extinctNatives=species.filter(sp=>!sp.invasive && sp.survival>0 && !(sp.pop>0)).map(sp=>sp.name);
 
- // Continue from the exact final state of that frozen-Expected verification burn-in.
- const burnInFinalPop=species.map(sp=>sp.invasive?0:Math.max(0,sp.pop));
-
- // Healthy visualization baselines also come from the SAME verification run.
+ // Healthy visualization baselines come from the REAL verification trajectory.
  const calibrationYearly=yearlyRows().filter(r=>r.year>=TAIL_START);
  species.forEach(sp=>{
    if(sp.invasive){sp.healthyViz=null;return;}
@@ -785,36 +807,28 @@ function autoBalance(){
  });
  renderDiagnostics=oldRD;renderYearlyDiagnostics=oldRY;
 
- // Scale the verified native ecosystem uniformly so the anchor's EXPECTED population
- // equals the designer-authored anchor. Uniform scaling preserves all ratios; producer
- // capacity scales with it so habitat does not silently change after calibration.
- const equilibriumAnchor=Math.max(0,species[anchorIndex]?.expectedPop||0);
- const equilibriumScale=equilibriumAnchor>0 ? anchorPop/equilibriumAnchor : 1;
+ // The exact end of real-rule verification becomes visible Year 0.
  species.forEach((sp,i)=>{
    if(sp.invasive){
      sp.startPop=invasiveStarts[i]??0;
-     sp.expectedPop=sp.startPop;
      sp.pop=invasivesEnabled()?sp.startPop:0;
    }else{
-     sp.expectedPop=Math.max(0,sp.expectedPop*equilibriumScale);
-     sp.startPop=Math.max(0,burnInFinalPop[i]*equilibriumScale);
-     sp.pop=sp.startPop;
-     if(sp.survival<=0 && (sp.capacity||0)>0)sp.capacity*=equilibriumScale;
+     sp.startPop=Math.max(0,sp.pop);
    }
  });
-
  year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
  renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
 
  let lines=["Calibrated native ecosystem from "+anchorName+" seed = "+fmt(anchorPop)+"."];
  species.forEach(sp=>lines.push(sp.name+": start "+fmt(sp.startPop)+(sp.invasive?" introduced (invasive)":"; expected "+fmt(sp.expectedPop))));
  if(unresolved.length)lines.push("⚠ Could not fully resolve: "+[...new Set(unresolved)].join(", "));
- lines.push((converged?"Expected Population converged":"⚠ Expected Population did NOT converge")+" after "+calibrationPasses+" pass"+(calibrationPasses===1?"":"es")+"; final solver change "+(maxRelativeChange*100).toFixed(2)+"%.");
- lines.push("Verification then ran "+CALIBRATION_YEARS+" native-only years with Expected Population frozen. Mature verification drift from Expected: "+(maxVerificationDrift*100).toFixed(2)+"%.");
+ lines.push((converged?"Continuous Expected Population converged":"⚠ Continuous Expected Population did NOT converge")+" after "+calibrationPasses+" pass"+(calibrationPasses===1?"":"es")+"; final solver change "+(maxRelativeChange*100).toFixed(2)+"%.");
+ lines.push("Continuous calibration ignored the <1 consumer extinction floor, then the solved ecosystem was rescaled ×"+equilibriumScale.toFixed(4)+" so "+anchorName+" Expected Population = "+fmt(anchorPop)+".");
+ lines.push("Real-rule verification then ran "+CALIBRATION_YEARS+" years with the physical <1 extinction floor restored and Expected Population frozen. Mature verification drift from Expected: "+(maxVerificationDrift*100).toFixed(2)+"%.");
+ if(extinctNatives.length)lines.push("⚠ Real-rule verification extinct native consumers: "+extinctNatives.join(", ")+".");
  if(maxVerificationDrift>CONVERGENCE_TOLERANCE)lines.push("⚠ Verification drift exceeds the 1% solver tolerance. Treat this calibration as unresolved rather than silently calling it healthy.");
- lines.push("Year 0 continues directly from the end of that frozen-Expected verification run. Expected Population is NOT changed after verification.");
- lines.push("Rescaled ×"+equilibriumScale.toFixed(4)+" so "+anchorName+" Expected Population = "+fmt(anchorPop)+".");
- lines.push("Invasives were excluded from every calibration/verification run and are "+(invasivesEnabled()?"introduced at their authored Starting Population for Year 0.":"currently excluded from the visible simulation.")+" The run checkbox can still introduce/remove them at any visible year.");
+ lines.push("Year 0 continues directly from the end of the real-rule verification run; Expected Population is not changed after continuous calibration.");
+ lines.push("Invasives were excluded from calibration and verification and are "+(invasivesEnabled()?"introduced at their authored Starting Population for Year 0.":"currently excluded from the visible simulation.")+" The run checkbox can still introduce/remove them at any visible year.");
  status.textContent=lines.join("\n");
 }
 function field(label,k,v,type="number"){return `<label><span>${label}</span><input data-k="${k}" type="${type}" ${type==="number"?'step="any"':''} value="${esc(v)}"></label>`}
