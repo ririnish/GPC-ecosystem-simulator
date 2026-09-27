@@ -41,7 +41,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.39</h1>
+<h1>GPC Ecosystem Simulator — v0.39b</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -694,16 +694,15 @@ function renderEditors(full=true){
 }
 
 function refreshAnchor(){
- const sel=document.getElementById("anchor"); if(!sel)return;
- const old=sel.value;
- sel.innerHTML="";
- species.forEach((sp,i)=>{
-   if((sp.survival||0)>0 && !sp.invasive){
-     let o=document.createElement("option");o.value=i;o.textContent=sp.name;sel.appendChild(o);
-   }
- });
- if([...sel.options].some(o=>o.value===old))sel.value=old;
- else if(sel.options.length)sel.value=sel.options.length-1;
+ const sel=document.getElementById("anchorSpecies"),old=sel.value;
+ const opts=species.filter(s=>!s.invasive&&s.survival>0);
+ sel.innerHTML=opts.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+ if(old&&opts.some(s=>s.id===old))sel.value=old;
+ else {
+   const wolf=opts.find(s=>s.name==="Wolf");
+   if(wolf)sel.value=wolf.id;
+   else if(opts.length)sel.value=opts[opts.length-1].id;
+ }
 }
 
 function autoBalance(){
