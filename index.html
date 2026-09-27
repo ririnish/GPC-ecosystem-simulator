@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.15</h1>
+<h1>GPC Ecosystem Simulator — v0.16</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -50,7 +50,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
   <button onclick="run(500)">Run 500</button>
   <button onclick="resetSim()">Reset</button>
  </div>
- <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. A deferred-maturation proxy keeps newborn consumers out of the active population until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Reproduction now responds continuously to food pressure: Reproduction Surplus sets both the extra ration threshold and the maximum reproductive tendency, so reproduction brakes before scarcity becomes a full survival crisis.</p></details>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Reproduction now responds continuously to food pressure: Reproduction Surplus sets both the extra ration threshold and the maximum reproductive tendency, so reproduction brakes before scarcity becomes a full survival crisis.</p></details>
 </div>
 
 <div class="card">
@@ -158,19 +158,18 @@ function step(){
  sync();
  species.forEach(sp=>{if(!Number.isFinite(sp.pop)||sp.pop<0)sp.pop=0});
  lastStats={};
- // Deferred maturation proxy: consumer offspring produced during the year are
- // accumulated off-population. They do not eat, hunt, get hunted, or reproduce
- // until they mature into the active population at the end of the year.
- // This captures the stabilizing generation delay without a full juvenile system.
+ // Monthly recruitment proxy: births are produced from annual authoring values but
+ // enter the active population at the end of each month. They can therefore feed,
+ // be hunted, and die beginning the next month instead of materializing in one
+ // year-end pulse. The breeding pool is frozen at the start of the year so those
+ // newborns do not increase reproductive eligibility until the following year.
  const annualBreedingPool=species.map(sp=>Math.max(0,sp.pop));
- const deferredBirths=new Array(species.length).fill(0);
- for(let month=0;month<12;month++)stepMonth(annualBreedingPool,deferredBirths,month+1);
- species.forEach((sp,i)=>{ if(sp.survival>0) sp.pop+=deferredBirths[i]; });
+ for(let month=0;month<12;month++)stepMonth(annualBreedingPool,month+1);
  year++;
  history.push(snapshot());
 }
 
-function stepMonth(annualBreedingPool,deferredBirths,monthNo){
+function stepMonth(annualBreedingPool,monthNo){
  const dt=1/12,start=species.map(sp=>Math.max(0,sp.pop));
  const obtained=new Array(species.length).fill(0),preyLossKg=new Array(species.length).fill(0);
  const monthDiag=species.map((sp,i)=>({year:year+1,month:monthNo,species:sp.name,start:start[i],predDeaths:0,postPred:0,foodRequired:0,foodObtained:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,end:0}));
@@ -325,8 +324,10 @@ function stepMonth(annualBreedingPool,deferredBirths,monthNo){
      lastStats[i].eligible+=eligible/12;
      const births=(eligible/2)*rnd(sp.minBirth,sp.maxBirth)*dt;monthDiag[i].births=births;
      lastStats[i].births+=births;
-     deferredBirths[i]+=births;
-     sp.pop=Math.max(0,supported);
+     // Births recruit immediately after this month’s mortality/feeding resolution.
+     // They become active ecological participants on the next monthly tick, while
+     // annualBreedingPool prevents them from breeding until the next simulated year.
+     sp.pop=Math.max(0,supported+births);
    }else{
      let growth=0;
      if(sp.capacity>0){
