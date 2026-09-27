@@ -41,7 +41,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.41</h1>
+<h1>GPC Ecosystem Simulator — v0.42</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -401,7 +401,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.41",
+   version:"v0.42",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -711,16 +711,16 @@ function renderEditors(full=true){
 }
 
 function refreshAnchor(){
- const sel=document.getElementById("anchorSpecies");if(!sel)return;
+ const sel=document.getElementById("anchor");if(!sel)return;
  const hadOptions=sel.options.length>0;
  const old=hadOptions?sel.value:"";
- const opts=species.filter(sp=>!sp.invasive&&(sp.survival||0)>0);
- sel.innerHTML=opts.map(sp=>`<option value="${sp.id}">${escapeHtml(sp.name)}</option>`).join("");
- if(old&&opts.some(sp=>sp.id===old))sel.value=old;
+ const opts=species.map((sp,index)=>({sp,index})).filter(x=>!x.sp.invasive&&(x.sp.survival||0)>0);
+ sel.innerHTML=opts.map(x=>`<option value="${x.index}">${escapeHtml(x.sp.name)}</option>`).join("");
+ if(old!==""&&opts.some(x=>String(x.index)===String(old)))sel.value=old;
  else {
-   const wolf=opts.find(sp=>sp.name==="Wolf");
-   if(wolf)sel.value=wolf.id;
-   else if(opts.length)sel.value=opts[opts.length-1].id;
+   const wolf=opts.find(x=>x.sp.name==="Wolf");
+   if(wolf)sel.value=String(wolf.index);
+   else if(opts.length)sel.value=String(opts[opts.length-1].index);
  }
 }
 
@@ -1035,7 +1035,7 @@ function draw(){
    wrap.append(track,transitions);row.append(label,wrap);out.appendChild(row);
  });
 }
-reorderSections();species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
+reorderSections();species=defaults();ensureSpeciesIds();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
 </html>
