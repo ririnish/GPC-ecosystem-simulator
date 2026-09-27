@@ -39,7 +39,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.27.1</h1>
+<h1>GPC Ecosystem Simulator — v0.28</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -57,7 +57,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 <div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Calibrate healthy ecosystem</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
- <p class="note">Pick one native consumer as the anchor. Auto-balance creates a native-only seed, then hidden pre-simulation estimates the mature healthy baseline. Native Starting and Expected Population are set from that baseline; invasive species keep their authored introduction population.</p>
+ <p class="note">Pick one native consumer as the anchor. Auto-balance creates a native-only seed, then hidden pre-simulation estimates the mature healthy baseline. The mature native baseline is rescaled so the calibrated anchor matches the Anchor Population exactly; all native Starting and Expected populations scale by the same factor. Producer carrying capacities scale with them to preserve the calibrated ecology. Invasive species keep their authored introduction population.</p>
  <div class="balance-grid">
   <label><span>Anchor species</span><select id="anchor"></select></label>
   <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="10"></label>
@@ -376,7 +376,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.27.1",
+   version:"v0.28",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -703,9 +703,23 @@ function autoBalance(){
  }
  renderDiagnostics=oldRD;renderYearlyDiagnostics=oldRY;
 
+ // Calibration discovers the ecosystem's relative equilibrium proportions. Then
+ // rescale the entire native ecosystem so the mature anchor population matches
+ // the designer-authored Anchor Population exactly. This makes the anchor a true
+ // scale control rather than merely the seed used to discover equilibrium.
+ const equilibriumAnchor=Math.max(0,species[anchorIndex]?.expectedPop||0);
+ const equilibriumScale=equilibriumAnchor>0 ? anchorPop/equilibriumAnchor : 1;
  species.forEach((sp,i)=>{
-   if(sp.invasive){sp.startPop=invasiveStarts[i]??0;sp.pop=sp.startPop;sp.expectedPop=sp.startPop;}
-   else{sp.startPop=Math.max(0,sp.expectedPop);sp.pop=sp.startPop;}
+   if(sp.invasive){
+     sp.startPop=invasiveStarts[i]??0;sp.pop=sp.startPop;sp.expectedPop=sp.startPop;
+   }else{
+     sp.expectedPop=Math.max(0,sp.expectedPop*equilibriumScale);
+     sp.startPop=sp.expectedPop;
+     sp.pop=sp.startPop;
+     // Producers need their habitat scale transformed with their population, or
+     // the rescaled ecosystem would immediately be constrained by the old capacity.
+     if(sp.survival<=0 && (sp.capacity||0)>0)sp.capacity*=equilibriumScale;
+   }
  });
  year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
  renderEditors();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
@@ -713,7 +727,8 @@ function autoBalance(){
  let lines=["Calibrated native ecosystem from "+anchorName+" seed = "+fmt(anchorPop)+"."];
  species.forEach(sp=>lines.push(sp.name+": "+fmt(sp.startPop)+(sp.invasive?" introduced (invasive)":" healthy baseline")));
  if(unresolved.length)lines.push("⚠ Could not fully resolve: "+[...new Set(unresolved)].join(", "));
- lines.push("Native baseline: 3 × 500-year hidden passes; Expected Population = mean of years 401–500 of the final pass.");
+ lines.push("Native baseline: 3 × 500-year hidden passes; equilibrium proportions = mean of years 401–500 of the final pass.");
+ lines.push("Rescaled ×"+fmt(equilibriumScale)+" so "+anchorName+" = "+fmt(anchorPop)+" at the calibrated baseline.");
  status.textContent=lines.join("\n");
 }
 
