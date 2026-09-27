@@ -15,6 +15,7 @@ button.primary{background:#17201b;color:white;border-color:#17201b}
 button.danger{color:#8b1e1e}
 input,select{font:inherit;padding:8px;border:1px solid #c7cec9;border-radius:8px;min-width:0;width:100%}
 table{width:100%;border-collapse:collapse;font-size:.9rem} th,td{padding:7px 5px;border-bottom:1px solid #edf0ed;text-align:right}
+.filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.filter-chip{display:flex;align-items:center;gap:5px;padding:7px 10px;border:1px solid #c9cfca;border-radius:999px;background:#fff;font-size:14px}.filter-chip input{width:auto;margin:0}
 #diagnostics thead th{position:sticky;top:0;z-index:4;background:#fff;box-shadow:0 1px 0 #d9ddd8}
 #diagnostics th:nth-child(1),#diagnostics td:nth-child(1){position:sticky;left:0;z-index:3;background:#fff;min-width:42px}
 #diagnostics th:nth-child(2),#diagnostics td:nth-child(2){position:sticky;left:42px;z-index:3;background:#fff;min-width:38px}
@@ -38,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.13</h1>
+<h1>GPC Ecosystem Simulator — v0.15</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -97,6 +98,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 <div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
+ <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div></div>
  <p class="note">One row per species per year. Flows such as births and deaths are annual totals; survival-only and reproduction-eligible are monthly averages; population is the end-of-year active population.</p>
  <div id="yearlyDiagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
@@ -105,6 +107,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 <div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
+ <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div></div>
  <p class="note">Trace each monthly step to find the first value that goes off the rails. The shared Analysis Range controls which years appear here.</p>
  <div id="diagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
@@ -364,6 +367,22 @@ function getAnalysisRange(){
  let to=toEl&&toEl.value!==""?Math.max(from,parseInt(toEl.value,10)||year):year;
  return {from,to:Math.min(to,year)};
 }
+function refreshDiagnosticSpeciesFilters(){
+ const names=species.map(s=>s.name);
+ [["yearlySpeciesFilter",renderYearlyDiagnostics],["monthlySpeciesFilter",renderDiagnostics]].forEach(([id,renderFn])=>{
+   const el=document.getElementById(id);if(!el)return;
+   const old=new Set([...el.querySelectorAll('input:checked')].map(x=>x.value));
+   const firstLoad=!el.querySelector('input');
+   el.innerHTML=names.map(n=>`<label class="filter-chip"><input type="checkbox" value="${escapeHtml(n)}" ${firstLoad||old.has(n)?'checked':''}>${escapeHtml(n)}</label>`).join("");
+   el.querySelectorAll('input').forEach(cb=>cb.addEventListener('change',renderFn));
+ });
+}
+function selectedDiagnosticSpecies(id){
+ const el=document.getElementById(id);
+ return el?new Set([...el.querySelectorAll('input:checked')].map(x=>x.value)):new Set(species.map(s=>s.name));
+}
+function escapeHtml(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
 function yearlyRows(){
  const groups=new Map();
  diagnosticRows.forEach(r=>{
@@ -376,7 +395,8 @@ function yearlyRows(){
 function renderDiagnostics(){
  const d=document.getElementById("diagnostics");if(!d)return;
  const {from,to}=getAnalysisRange();
- const rows=diagnosticRows.filter(r=>r.year>=Math.max(1,from)&&r.year<=to);
+ const speciesFilter=selectedDiagnosticSpecies("monthlySpeciesFilter");
+ const rows=diagnosticRows.filter(r=>r.year>=Math.max(1,from)&&r.year<=to&&speciesFilter.has(r.species));
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate a monthly trace.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
  let h='<table><thead><tr><th>Yr</th><th>Mo</th><th>Species</th><th>Start</th><th>Pred deaths</th><th>Post-pred</th><th>Food req kg</th><th>Food got kg</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Survive only</th><th>Repro eligible</th><th>Births</th><th>Regrowth</th><th>End active</th></tr></thead><tbody>';
@@ -385,7 +405,8 @@ function renderDiagnostics(){
 }
 function renderYearlyDiagnostics(){
  const d=document.getElementById("yearlyDiagnostics");if(!d)return;
- const {from,to}=getAnalysisRange();const rows=yearlyRows().filter(r=>r.year>=Math.max(1,from)&&r.year<=to);
+ const {from,to}=getAnalysisRange();const speciesFilter=selectedDiagnosticSpecies("yearlySpeciesFilter");
+ const rows=yearlyRows().filter(r=>r.year>=Math.max(1,from)&&r.year<=to&&speciesFilter.has(r.species));
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate yearly diagnostics.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
  let h='<table><thead><tr><th>Yr</th><th>Species</th><th>Start</th><th>End</th><th>Food %</th><th>Pred deaths</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Avg survive only</th><th>Avg repro eligible</th><th>Births</th><th>Regrowth</th></tr></thead><tbody>';
@@ -422,8 +443,8 @@ function sync(){
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors()}
-function delSpecies(i){sync();species.splice(i,1);renderEditors();resetSim(true)}
+function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
+function delSpecies(i){sync();species.splice(i,1);renderEditors();refreshDiagnosticSpeciesFilters();resetSim(true)}
 
 function renderEditors(full=true){
  const root=document.getElementById("editors");
@@ -609,7 +630,7 @@ function draw(){
  ctx.fillStyle="#657069";ctx.fillText("0",5,h-padB+4);ctx.fillText(Math.round(max).toLocaleString(),5,padT+4);
 }
 window.addEventListener("resize",draw);
-species=defaults();renderEditors();resetSim(true);refreshAnchor();renderDiagnostics();renderYearlyDiagnostics();
+species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
 </html>
