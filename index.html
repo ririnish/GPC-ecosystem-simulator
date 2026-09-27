@@ -33,13 +33,13 @@ th:first-child,td:first-child{text-align:left}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:8px}
 label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px}
 .species{border-top:1px solid #eee;padding-top:12px;margin-top:12px}
-canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;background:#fff}
+.population-timeline{display:flex;flex-direction:column;gap:14px}.timeline-row{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:start}.timeline-label{font-weight:650;font-size:.9rem;padding-top:3px}.timeline-track{display:flex;height:30px;border:1px solid #d8ddd9;border-radius:8px;overflow:hidden;background:#f3f5f3}.timeline-segment{min-width:2px;position:relative}.timeline-segment:hover{outline:2px solid #17201b;outline-offset:-2px;z-index:2}.timeline-transitions{font-size:.72rem;color:#68736c;margin-top:4px;line-height:1.45}.rating-legend{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.rating-key{display:flex;align-items:center;gap:5px;font-size:.76rem}.rating-swatch{width:13px;height:13px;border-radius:3px;border:1px solid #0002}.rating-extinct{background:#303633}.rating-scarce{background:#d99537}.rating-stable{background:#5b9b68}.rating-abundant{background:#4f83b8}.rating-overpopulated{background:#9b5ba5}@media(max-width:600px){.timeline-row{grid-template-columns:82px 1fr}.timeline-label{font-size:.78rem}}
 .note{font-size:.8rem;color:#68736c}.balance-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end}.status{margin-top:10px;padding:10px;border-radius:9px;background:#f5f7f5;font-size:.86rem;white-space:pre-line}@media(max-width:600px){.balance-grid{grid-template-columns:1fr 1fr}.balance-grid button{grid-column:1/-1}}
 @media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}table{font-size:.78rem}th,td{padding:6px 3px}.hide-mobile{display:none}}
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.25</h1>
+<h1>GPC Ecosystem Simulator — v0.26</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -51,7 +51,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
   <button onclick="exportSimulation()">Export simulation</button>
   <button onclick="resetSim()">Reset</button>
  </div>
- <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Auto-balance also freezes each species’ resulting starting population as its Expected Population. Expected Population is not a cap: populations may overshoot it freely. For animal prey below that healthy reference, encounterability declines in proportion to current/expected abundance, making scarce prey harder for predators to locate before they are eaten to extinction.</p></details>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Auto-balance also freezes each species’ resulting starting population as its Expected Population. Expected Population is not a cap: populations may overshoot it freely. For animal prey below that healthy reference, encounterability declines in proportion to current/expected abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
 </div>
 
 <div class="card">
@@ -96,13 +96,14 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 <div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
- <div><span class="small">Species to display</span><div id="graphSpeciesFilter" class="filter-chips"></div></div>
- <canvas id="chart"></canvas>
+ <p class="note">Each species gets a categorical population timeline relative to its frozen Expected Population. Extinct = 0; Scarce = below 50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p>
+ <div class="rating-legend"><span class="rating-key"><i class="rating-swatch rating-extinct"></i>Extinct</span><span class="rating-key"><i class="rating-swatch rating-scarce"></i>Scarce</span><span class="rating-key"><i class="rating-swatch rating-stable"></i>Stable</span><span class="rating-key"><i class="rating-swatch rating-abundant"></i>Abundant</span><span class="rating-key"><i class="rating-swatch rating-overpopulated"></i>Overpopulated</span></div>
+ <div id="populationTimeline" class="population-timeline"></div>
  <div class="graph-controls" style="margin-top:12px">
   <label><span>Average population — start in year</span><input id="averageStartYear" type="number" min="0" step="1" value="25" oninput="renderPopulationAverages()"></label>
  </div>
  <div id="populationAverages"></div>
- <p class="note">Average Population uses annual population snapshots from the selected start year through the latest simulated year, letting you exclude the initial transient spike. Choose graph species here independently; the average includes all species.</p>
+ <p class="note">Average Population uses annual population snapshots from the selected start year through the latest simulated year, letting you exclude the initial transient spike. The status timeline includes all species; the average includes all species.</p>
  </div>
 </div>
 
@@ -342,6 +343,10 @@ function stepMonth(annualBreedingPool,monthNo){
      // They become active ecological participants on the next monthly tick, while
      // annualBreedingPool prevents them from breeding until the next simulated year.
      sp.pop=Math.max(0,supported+births);
+     // Continuous math is useful internally, but a real consumer population cannot
+     // contain a fraction of one organism. Crossing below one individual is extinction.
+     // Extinction is absorbing unless a future explicit reintroduction mechanic changes it.
+     if(sp.pop>0 && sp.pop<1)sp.pop=0;
    }else{
      let growth=0;
      if(sp.capacity>0){
@@ -371,7 +376,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.25",
+   version:"v0.26",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -738,38 +743,49 @@ function renderPopulationAverages(){
  out.innerHTML=`<p class="note">Average from year ${start} through year ${last} (${data.length} annual snapshots).</p><div class="table-wrap"><table><thead><tr><th>Species</th><th>Starting Population</th><th>Average Population</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function draw(){
- const c=document.getElementById("chart"),ctx=c.getContext("2d");
- const dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);
- ctx.clearRect(0,0,w,h);
- const {from,to}=getAnalysisRange();
- let data=history.filter(r=>r.year>=from&&r.year<=to);
- if(data.length<2){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("Run more years or widen the graph range.",45,45);return;}
- let shown=species.filter(s=>s.graph!==false);
- const padL=52,padR=18,padT=30,padB=38;
- if(!shown.length){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("No species selected for graph.",padL,45);return;}
- let max=1;data.forEach(r=>shown.forEach(s=>max=Math.max(max,r[s.name]||0)));
- ctx.strokeStyle="#dfe4e0";ctx.lineWidth=1;
- for(let j=0;j<=4;j++){let y=padT+(h-padT-padB)*j/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(w-padR,y);ctx.stroke()}
- const minYear=data[0].year,maxYear=data[data.length-1].year,span=Math.max(1,maxYear-minYear);
- const xForYear=y=>padL+(w-padL-padR)*(y-minYear)/span;
- // X-axis year labels.
- ctx.fillStyle="#657069";ctx.font="11px system-ui";ctx.textAlign="center";
- const ticks=Math.min(6,Math.max(2,Math.floor((w-padL-padR)/65)));
- for(let i=0;i<ticks;i++){
-   const yr=Math.round(minYear+(maxYear-minYear)*i/(ticks-1));
-   const x=xForYear(yr);ctx.beginPath();ctx.moveTo(x,h-padB);ctx.lineTo(x,h-padB+4);ctx.stroke();ctx.fillText(String(yr),x,h-padB+18);
- }
- const colors=["#2b6f47","#b86b25","#496fb5","#8b4ba5","#c44f57","#4f8d91","#7a6a42","#555"];
- shown.forEach((s,si)=>{
-  ctx.strokeStyle=colors[si%colors.length];ctx.lineWidth=2;ctx.beginPath();
-  data.forEach((r,j)=>{let x=xForYear(r.year), y=h-padB-(h-padT-padB)*(r[s.name]||0)/max;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});
-  ctx.stroke();
- });
- ctx.textAlign="left";ctx.font="12px system-ui";shown.forEach((s,i)=>{ctx.fillStyle=colors[i%colors.length];ctx.fillText(s.name,padL+i*75,16)});
- ctx.fillStyle="#657069";ctx.fillText("0",5,h-padB+4);ctx.fillText(Math.round(max).toLocaleString(),5,padT+4);
+function populationRating(sp,pop){
+ if(!(pop>0))return "extinct";
+ const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
+ if(expected<=0)return "stable";
+ const ratio=pop/expected;
+ if(ratio<0.5)return "scarce";
+ if(ratio<1.5)return "stable";
+ if(ratio<2.5)return "abundant";
+ return "overpopulated";
 }
-window.addEventListener("resize",draw);
+function ratingLabel(r){return ({extinct:"Extinct",scarce:"Scarce",stable:"Stable",abundant:"Abundant",overpopulated:"Overpopulated"})[r]||r}
+function draw(){
+ const out=document.getElementById("populationTimeline");if(!out)return;
+ const {from,to}=getAnalysisRange();
+ const data=history.filter(r=>r.year>=from&&r.year<=to);
+ if(!data.length){out.innerHTML='<p class="note">Run the simulation to build population history.</p>';return;}
+ out.innerHTML="";
+ species.forEach(sp=>{
+   let segments=[],current=null;
+   data.forEach((snap,idx)=>{
+     const rating=populationRating(sp,Number(snap[sp.name])||0);
+     if(!current||current.rating!==rating){
+       if(current)segments.push(current);
+       current={rating,start:snap.year,end:snap.year,count:1};
+     }else{current.end=snap.year;current.count++;}
+   });
+   if(current)segments.push(current);
+   const row=document.createElement("div");row.className="timeline-row";
+   const label=document.createElement("div");label.className="timeline-label";label.textContent=sp.name;
+   const wrap=document.createElement("div");
+   const track=document.createElement("div");track.className="timeline-track";
+   const total=Math.max(1,data.length);
+   segments.forEach(seg=>{
+     const el=document.createElement("div");el.className=`timeline-segment rating-${seg.rating}`;
+     el.style.flex=`${seg.count} 1 0`;
+     el.title=`${sp.name}: ${ratingLabel(seg.rating)}, year ${seg.start}${seg.end!==seg.start?"–"+seg.end:""}`;
+     track.appendChild(el);
+   });
+   const transitions=document.createElement("div");transitions.className="timeline-transitions";
+   transitions.textContent=segments.map((seg,i)=>i===0?`Y${seg.start} ${ratingLabel(seg.rating)}`:`Y${seg.start} → ${ratingLabel(seg.rating)}`).join("  •  ");
+   wrap.append(track,transitions);row.append(label,wrap);out.appendChild(row);
+ });
+}
 species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
