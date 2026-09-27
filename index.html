@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.16</h1>
+<h1>GPC Ecosystem Simulator — v0.17</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -50,7 +50,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
   <button onclick="run(500)">Run 500</button>
   <button onclick="resetSim()">Reset</button>
  </div>
- <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Reproduction now responds continuously to food pressure: Reproduction Surplus sets both the extra ration threshold and the maximum reproductive tendency, so reproduction brakes before scarcity becomes a full survival crisis.</p></details>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Reproduction now responds continuously to food pressure: Reproduction Surplus sets both the extra ration threshold and the maximum reproductive tendency, so reproduction brakes before scarcity becomes a full survival crisis. Auto-balance also freezes each species’ resulting starting population as its Expected Population. Expected Population is not a cap: populations may overshoot it freely. For animal prey below that healthy reference, encounterability declines in proportion to current/expected abundance, making scarce prey harder for predators to locate before they are eaten to extinction.</p></details>
 </div>
 
 <div class="card">
@@ -128,15 +128,15 @@ let species=[], year=0, history=[], lastStats={};
 
 function defaults(){
  return [
-  {name:"Carrot",pop:50000,startPop:50000,capacity:60000,regrowth:600,survival:0,edible:0.1,pred:0,graph:false},
-  {name:"Rabbit",pop:5000,startPop:5000,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Carrot",graph:true},
-  {name:"Fox",pop:100,startPop:100,capacity:0,regrowth:600,minBirth:2,maxBirth:7,lifespan:10,survival:100,reproSurplus:20,edible:8,pred:7,prey:"Rabbit",graph:true},
-  {name:"Wolf",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:4,lifespan:12,survival:150,reproSurplus:20,edible:30,pred:5,prey:"Fox",graph:true}
+  {name:"Carrot",pop:50000,startPop:50000,expectedPop:50000,capacity:60000,regrowth:600,survival:0,edible:0.1,pred:0,graph:false},
+  {name:"Rabbit",pop:5000,startPop:5000,expectedPop:5000,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Carrot",graph:true},
+  {name:"Fox",pop:100,startPop:100,expectedPop:100,capacity:0,regrowth:600,minBirth:2,maxBirth:7,lifespan:10,survival:100,reproSurplus:20,edible:8,pred:7,prey:"Rabbit",graph:true},
+  {name:"Wolf",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:4,lifespan:12,survival:150,reproSurplus:20,edible:30,pred:5,prey:"Fox",graph:true}
  ];
 }
 function loadDefaults(){
  species=defaults();
- species.forEach(s=>{ if(!Number.isFinite(s.startPop)) s.startPop=s.pop; });
+ species.forEach(s=>{ if(!Number.isFinite(s.startPop)) s.startPop=s.pop; if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop; });
  resetSim(true);
  renderEditors();
 }
@@ -145,6 +145,7 @@ function resetSim(keep=false){
  species.forEach(s=>{
    if(!Number.isFinite(s.capacity)) s.capacity=0;
    if(!Number.isFinite(s.startPop)) s.startPop=Number.isFinite(s.pop)?s.pop:0;
+   if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop;
    s.pop=s.startPop;
  });
  year=0; history=[snapshot()]; lastStats={};
@@ -195,7 +196,13 @@ function stepMonth(annualBreedingPool,monthNo){
    const desired=start[pi]*pred.survival*dt*avgRationCost;
    let weights=opts.map(qi=>{
      const prey=species[qi],eff=hunt(pred.pred,prey.pred);
-     return {qi,eff,effective:start[qi]*Math.max(0,prey.edible)*eff};
+     // Expected Population is a frozen healthy-abundance reference, not a cap.
+     // Above expected abundance, absolute prey availability already provides the
+     // benefit, so encounterability stays at 1. Below expected abundance, prey
+     // becomes proportionally harder to encounter as it grows scarce.
+     const expected=Math.max(0,Number.isFinite(prey.expectedPop)?prey.expectedPop:prey.startPop);
+     const encounter=expected>0?Math.min(1,start[qi]/expected):1;
+     return {qi,eff,encounter,effective:start[qi]*Math.max(0,prey.edible)*eff*encounter};
    }).filter(x=>x.effective>0);
    const total=weights.reduce((a,x)=>a+x.effective,0);
    if(total<=0)return;
@@ -444,7 +451,7 @@ function sync(){
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
 function delSpecies(i){sync();species.splice(i,1);renderEditors();refreshDiagnosticSpeciesFilters();resetSim(true)}
 
 function renderEditors(full=true){
@@ -557,6 +564,10 @@ function autoBalance(){
    }
  });
  species[anchorIndex].startPop=anchorPop;species[anchorIndex].pop=anchorPop;
+ // Freeze the auto-balanced healthy starting web as Expected Population. This is
+ // only a reference for scarcity/encounterability; populations remain free to
+ // overshoot it into Abundant/Overpopulated states.
+ species.forEach(sp=>{sp.expectedPop=Math.max(0,sp.startPop);});
  year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
  renderEditors();renderState();draw();renderDiagnostics();renderYearlyDiagnostics();
 
