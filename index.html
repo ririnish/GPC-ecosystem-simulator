@@ -39,7 +39,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.29</h1>
+<h1>GPC Ecosystem Simulator — v0.30</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -109,6 +109,18 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </div>
 
 <div class="card">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Visualization output</h2><button class="collapse-btn" type="button">−</button></div>
+ <div class="section-body">
+  <div class="graph-controls">
+   <label><span>Illustrate year</span><input id="illustrateYear" type="number" min="0" step="1" value="0" oninput="renderVisualizationOutput()"></label>
+   <button type="button" onclick="setIllustrateLatest()">Latest year</button>
+  </div>
+  <p class="note">Turns simulation state into an illustration brief. Population uses Expected Population. Body condition uses food sufficiency. Babies, carcasses (natural + starvation deaths), and remains (predation deaths) are compared as per-capita annual rates against the native healthy calibration distribution. “Normal” is the middle 80% of healthy calibration years (10th–90th percentile), so the ecosystem defines its own normal variation. Invasive species have no pre-invasion healthy baseline, so rate-based outputs show —.</p>
+  <div id="visualizationOutput" style="overflow:auto"></div>
+ </div>
+</div>
+
+<div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div></div>
@@ -162,7 +174,7 @@ function resetSim(keep=false){
    s.pop=s.startPop;
  });
  year=0; history=[snapshot()]; lastStats={};
- renderEditors(); renderState(); draw(); renderPopulationAverages(); renderDiagnostics(); renderYearlyDiagnostics();
+ renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics();
 }
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
 function rnd(a,b){return a+Math.random()*(b-a)}
@@ -378,7 +390,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.29",
+   version:"v0.30",
    exportedAt,
    simulatedThroughYear:year,
    species:species.map(s=>({
@@ -388,7 +400,7 @@ function exportSimulation(){
      birthsPerYearPer2:[s.minBirth??null,s.maxBirth??null],lifespanYears:s.lifespan??null,
      survivalFoodKgPerYear:s.survival,reproductionSurplusPercent:s.reproSurplus??null,
      edibleBiomassKg:s.edible,predationRating:s.pred,validPrey:s.prey||"",
-     currentPopulation:s.pop,isInvasive:!!s.invasive
+     currentPopulation:s.pop,isInvasive:!!s.invasive,healthyVisualizationBaseline:s.healthyViz||null
    })),
    populationHistory:history,
    yearlyDiagnostics:yearly,
@@ -504,7 +516,7 @@ function toggleInvasiveSimulation(){
  // Treat the toggle as an explicit introduction/removal event at the current year.
  // Replace the current-year snapshot so graphs/state immediately reflect the choice.
  if(history.length)history[history.length-1]=snapshot();
- renderState();draw();renderPopulationAverages();
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();
 }
 function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics()}
 
@@ -713,6 +725,21 @@ function autoBalance(){
      sp.expectedPop=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:Math.max(0,sp.startPop);
    });
  }
+ // Save native healthy per-capita rate distributions from the mature tail of the final pass.
+ // These become the reference for illustration outputs; no arbitrary Few/Many threshold
+ // is needed because the healthy ecosystem's own year-to-year variation defines Normal.
+ const calibrationYearly=yearlyRows().filter(r=>r.year>=401);
+ species.forEach(sp=>{
+   if(sp.invasive){sp.healthyViz=null;return;}
+   const rows=calibrationYearly.filter(r=>(r.speciesId||r.species)===(sp.id||sp.name));
+   const perCap=(keyFn)=>rows.map(r=>{
+     const avgPop=Math.max(0,(Number(r.start||0)+Number(r.end||0))/2);
+     return avgPop>0?keyFn(r)/avgPop:null;
+   }).filter(Number.isFinite);
+   const q=(arr,p)=>{if(!arr.length)return null;const a=[...arr].sort((x,y)=>x-y),x=(a.length-1)*p,lo=Math.floor(x),hi=Math.ceil(x);return lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(x-lo)};
+   const pack=arr=>({p10:q(arr,.10),median:q(arr,.50),p90:q(arr,.90)});
+   sp.healthyViz={births:pack(perCap(r=>r.births||0)),carcasses:pack(perCap(r=>(r.naturalDeaths||0)+(r.starvation||0))),remains:pack(perCap(r=>r.predDeaths||0))};
+ });
  renderDiagnostics=oldRD;renderYearlyDiagnostics=oldRY;
 
  // Calibration discovers the ecosystem's relative equilibrium proportions. Then
@@ -734,7 +761,7 @@ function autoBalance(){
    }
  });
  year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
- renderEditors();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
+ renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
 
  let lines=["Calibrated native ecosystem from "+anchorName+" seed = "+fmt(anchorPop)+"."];
  species.forEach(sp=>lines.push(sp.name+": "+fmt(sp.startPop)+(sp.invasive?" introduced (invasive)":" healthy baseline")));
@@ -774,6 +801,50 @@ function showAllYears(){
 function showSingleYear(){
  const el=document.getElementById("singleYear");let y=Math.max(1,Math.min(year,parseInt(el.value,10)||year));
  document.getElementById("graphFrom").value=y;document.getElementById("graphTo").value=y;analysisRangeChanged();
+}
+
+function populationRatingFor(sp,pop){
+ const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
+ if(pop<=0)return "Extinct"; if(expected<=0)return "Stable";
+ const ratio=pop/expected; if(ratio<.5)return "Scarce"; if(ratio<1.5)return "Stable"; if(ratio<2.5)return "Abundant"; return "Overpopulated";
+}
+function bodyConditionFor(sp,row){
+ if((sp.survival||0)<=0)return "—";
+ if(!row||!(row.foodRequired>0))return "—";
+ const foodRatio=(row.foodObtained||0)/row.foodRequired;
+ const r=Math.min(1,Math.max(0,(sp.reproSurplus||0)/100));
+ const fullHealthyTarget=(1-r)*(1+r)+r; // authored average survival + reproduction ration target
+ if(foodRatio<.95)return "Thin";
+ if(foodRatio>=Math.max(1.05,fullHealthyTarget*.98))return "Fat";
+ return "Normal";
+}
+function rateCategory(value,avgPop,baseline){
+ if(value<=0)return "None";
+ if(!(avgPop>0)||!baseline||!Number.isFinite(baseline.p10)||!Number.isFinite(baseline.p90))return "—";
+ const rate=value/avgPop; if(rate<baseline.p10)return "Few"; if(rate>baseline.p90)return "Many"; return "Normal";
+}
+function setIllustrateLatest(){const el=document.getElementById("illustrateYear");if(el){el.value=year;renderVisualizationOutput();}}
+function renderVisualizationOutput(){
+ const out=document.getElementById("visualizationOutput"),input=document.getElementById("illustrateYear");if(!out||!input)return;
+ let y=Math.max(0,Math.min(year,parseInt(input.value,10)||0));
+ const snap=history.find(h=>h.year===y);
+ if(!snap){out.innerHTML='<p class="note">No snapshot exists for that year.</p>';return;}
+ const annualRows=yearlyRows();
+ const annual=new Map(annualRows.filter(r=>r.year===y).map(r=>[r.speciesId||r.species,r]));
+ let h='<table><thead><tr><th>Species</th><th>Population</th><th>Body</th><th>Babies</th><th>Carcasses</th><th>Remains</th></tr></thead><tbody>';
+ species.forEach(sp=>{
+   const pop=Math.max(0,Number(snap[sp.name]||0));
+   const row=annual.get(sp.id||sp.name);
+   const avgPop=row?Math.max(0,(Number(row.start||0)+Number(row.end||0))/2):pop;
+   const baseline=sp.healthyViz;
+   const babies=row?rateCategory(row.births||0,avgPop,baseline?.births):"—";
+   const carcasses=row?rateCategory((row.naturalDeaths||0)+(row.starvation||0),avgPop,baseline?.carcasses):"—";
+   const remains=row?rateCategory(row.predDeaths||0,avgPop,baseline?.remains):"—";
+   h+=`<tr><td>${esc(sp.name)}</td><td>${populationRatingFor(sp,pop)}</td><td>${bodyConditionFor(sp,row)}</td><td>${babies}</td><td>${carcasses}</td><td>${remains}</td></tr>`;
+ });
+ h+='</tbody></table>';
+ if(y===0)h+='<p class="note">Year 0 has population state only; body condition and annual event outputs begin after the first simulated year.</p>';
+ out.innerHTML=h;
 }
 
 function renderPopulationAverages(){
