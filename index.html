@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.17</h1>
+<h1>GPC Ecosystem Simulator — v0.18</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -78,20 +78,21 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
  <div class="section-head" onclick="toggleSection(this)"><h2>Analysis range</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
   <div class="graph-controls">
-   <label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" value="0" oninput="analysisRangeChanged()"></label>
+   <label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" placeholder="Set range" oninput="analysisRangeChanged()"></label>
    <label><span>To year</span><input id="graphTo" type="number" min="0" step="1" placeholder="Latest" oninput="analysisRangeChanged()"></label>
    <button type="button" onclick="showLatestYears(25)">Latest 25</button><button type="button" onclick="showAllYears()">All years</button>
   </div>
   <div class="graph-controls" style="margin-top:8px"><label><span>Jump to single year</span><input id="singleYear" type="number" min="1" step="1" placeholder="e.g. 9"></label><button type="button" onclick="showSingleYear()">View year</button></div>
-  <p class="note">This range controls Population History, Yearly Diagnostics, Monthly Diagnostics, and the Current State snapshot.</p>
+  <p class="note">Leave the range blank to show the full Population History without rendering the large diagnostics tables. Set both From and To years (or use Latest 25 / View year) to populate Yearly and Monthly Diagnostics. Current State shows the selected endpoint, or the latest year when no range is set.</p>
  </div>
 </div>
 
 <div class="card">
  <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
+ <div><span class="small">Species to display</span><div id="graphSpeciesFilter" class="filter-chips"></div></div>
  <canvas id="chart"></canvas>
- <p class="note">Only species with “Show on graph” checked are plotted and included in graph scaling. Use the shared Analysis Range above to zoom the graph and diagnostics together.</p>
+ <p class="note">Choose graph species here. Use the shared Analysis Range above to zoom the graph; diagnostics only render after an explicit From/To range is set.</p>
  </div>
 </div>
 
@@ -99,7 +100,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
  <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div></div>
- <p class="note">One row per species per year. Flows such as births and deaths are annual totals; survival-only and reproduction-eligible are monthly averages; population is the end-of-year active population.</p>
+ <p class="note">One row per species per year. Set an explicit Analysis Range before this table loads. Flows such as births and deaths are annual totals; survival-only and reproduction-eligible are monthly averages; population is the end-of-year active population.</p>
  <div id="yearlyDiagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
 </div>
@@ -108,7 +109,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
  <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div></div>
- <p class="note">Trace each monthly step to find the first value that goes off the rails. The shared Analysis Range controls which years appear here.</p>
+ <p class="note">Trace each monthly step to find the first value that goes off the rails. Set an explicit Analysis Range before this table loads.</p>
  <div id="diagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
 </div>
@@ -375,6 +376,19 @@ function getAnalysisRange(){
  let to=toEl&&toEl.value!==""?Math.max(from,parseInt(toEl.value,10)||year):year;
  return {from,to:Math.min(to,year)};
 }
+function hasExplicitAnalysisRange(){
+ const fromEl=document.getElementById("graphFrom"),toEl=document.getElementById("graphTo");
+ return !!(fromEl && toEl && fromEl.value!=="" && toEl.value!=="");
+}
+function refreshGraphSpeciesFilter(){
+ const el=document.getElementById("graphSpeciesFilter"); if(!el)return;
+ el.innerHTML=species.map((s,i)=>`<label class="filter-chip"><input type="checkbox" data-graph-index="${i}" ${s.graph!==false?'checked':''}>${escapeHtml(s.name)}</label>`).join("");
+ el.querySelectorAll('input').forEach(cb=>cb.addEventListener('change',()=>{
+   const i=parseInt(cb.dataset.graphIndex,10);
+   if(species[i])species[i].graph=cb.checked;
+   draw();
+ }));
+}
 function refreshDiagnosticSpeciesFilters(){
  const names=species.map(s=>s.name);
  [["yearlySpeciesFilter",renderYearlyDiagnostics],["monthlySpeciesFilter",renderDiagnostics]].forEach(([id,renderFn])=>{
@@ -402,6 +416,7 @@ function yearlyRows(){
 }
 function renderDiagnostics(){
  const d=document.getElementById("diagnostics");if(!d)return;
+ if(!hasExplicitAnalysisRange()){d.innerHTML='<p class="note">Set both From year and To year in Analysis Range to load monthly diagnostics.</p>';return;}
  const {from,to}=getAnalysisRange();
  const speciesFilter=selectedDiagnosticSpecies("monthlySpeciesFilter");
  const rows=diagnosticRows.filter(r=>r.year>=Math.max(1,from)&&r.year<=to&&speciesFilter.has(r.species));
@@ -413,6 +428,7 @@ function renderDiagnostics(){
 }
 function renderYearlyDiagnostics(){
  const d=document.getElementById("yearlyDiagnostics");if(!d)return;
+ if(!hasExplicitAnalysisRange()){d.innerHTML='<p class="note">Set both From year and To year in Analysis Range to load yearly diagnostics.</p>';return;}
  const {from,to}=getAnalysisRange();const speciesFilter=selectedDiagnosticSpecies("yearlySpeciesFilter");
  const rows=yearlyRows().filter(r=>r.year>=Math.max(1,from)&&r.year<=to&&speciesFilter.has(r.species));
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate yearly diagnostics.</p>';return;}
@@ -483,13 +499,12 @@ function renderEditors(full=true){
   </div>
   <div class="row" style="margin-top:8px;align-items:end">
    ${producer ? "" : `<label style="flex:1"><span>Valid prey (comma-separated names)</span><input data-k="prey" value="${esc(s.prey ?? "")}"></label>`}
-   <label style="width:auto;display:flex;align-items:center;gap:7px;padding:9px 4px;color:#39433d"><input data-k="graph" type="checkbox" ${s.graph!==false?'checked':''} style="width:auto"> Show on graph</label>
    <button class="danger" onclick="delSpecies(${i})">Delete</button>
   </div>`;
   root.appendChild(d);
-  const gc=d.querySelector('[data-k="graph"]'); if(gc) gc.addEventListener("change",()=>{sync();draw();});
  });
  refreshAnchor();
+ refreshGraphSpeciesFilter();
 }
 
 function refreshAnchor(){
@@ -603,7 +618,7 @@ function showLatestYears(n){
  from.value=Math.max(0,year-n);to.value=year;analysisRangeChanged();
 }
 function showAllYears(){
- document.getElementById("graphFrom").value=0;document.getElementById("graphTo").value="";analysisRangeChanged();
+ document.getElementById("graphFrom").value="";document.getElementById("graphTo").value="";analysisRangeChanged();
 }
 function showSingleYear(){
  const el=document.getElementById("singleYear");let y=Math.max(1,Math.min(year,parseInt(el.value,10)||year));
