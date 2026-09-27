@@ -41,7 +41,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.42</h1>
+<h1>GPC Ecosystem Simulator — v0.43</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -401,7 +401,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.42",
+   version:"v0.43",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -678,7 +678,7 @@ function renderEditors(full=true){
   d.innerHTML=`<div class="grid">
    ${field("Name","name",s.name,"text")}
    ${field("Emoji name (optional)","emoji",s.emoji ?? "","text")}
-   ${field("Reference species (population health; invasive only)","referenceSpecies",s.referenceSpecies ?? "","text")}
+   <label><span>Reference species (population health; invasive only)</span><select data-k="referenceSpecies"><option value="">— None —</option>${species.filter((x,j)=>j!==i).map(x=>`<option value="${esc(x.name)}" ${x.name===(s.referenceSpecies||"")?"selected":""}>${esc(x.name)}</option>`).join("")}</select></label>
    ${field("Starting population","pop",round(s.startPop ?? s.pop))}
    <label><span>Species type</span><select data-k="type"><option value="consumer" ${producer?"":"selected"}>Consumer</option><option value="producer" ${producer?"selected":""}>Producer</option></select></label>
    <label><span>Invasive species</span><span style="display:flex;align-items:center;gap:8px;min-height:38px"><input data-k="invasive" type="checkbox" style="width:auto" ${s.invasive?"checked":""}> Is invasive</span></label>
@@ -910,6 +910,12 @@ function showSingleYear(){
  document.getElementById("graphFrom").value=y;document.getElementById("graphTo").value=y;applyAnalysisRange();
 }
 
+function bodyConditionColor(v){
+ return ({Fat:"#b07a2a",Normal:"#4f7f58",Thin:"#c45a4a"})[v]||"inherit";
+}
+function eventLevelColor(v){
+ return ({None:"#777",Few:"#b07a2a",Normal:"#4f7f58",Many:"#8b5aa8"})[v]||"inherit";
+}
 function ratingColor(r){
  return ({Extinct:"#555",Critical:"#d32f2f",Scarce:"#e58b2a",Stable:"#5c9b62",Abundant:"#4285c5",Overpopulated:"#9454a8"})[r]||"inherit";
 }
@@ -963,11 +969,13 @@ function renderVisualizationOutput(){
    const babies=row?rateCategory(row.births||0,avgPop,baseline?.births):"—";
    const carcasses=row?rateCategory((row.naturalDeaths||0)+(row.starvation||0),avgPop,baseline?.carcasses):"—";
    const remains=row?rateCategory(row.predDeaths||0,avgPop,baseline?.remains):"—";
-   const rating=populationRatingFor(sp,pop),color=ratingColor(rating);
-   h+=`<tr style="color:${color}"><td>${esc(speciesDisplay(sp))}</td><td>${rating}</td><td>${bodyConditionFor(sp,row)}</td><td>${babies}</td><td>${carcasses}</td><td>${remains}</td></tr>`;
+   const rating=populationRatingFor(sp,pop),popColor=ratingColor(rating),body=bodyConditionFor(sp,row);
+   h+=`<tr><td style="color:${popColor}">${esc(speciesDisplay(sp))}</td><td style="color:${popColor}">${rating}</td><td style="color:${bodyConditionColor(body)}">${body}</td><td style="color:${eventLevelColor(babies)}">${babies}</td><td style="color:${eventLevelColor(carcasses)}">${carcasses}</td><td style="color:${eventLevelColor(remains)}">${remains}</td></tr>`;
  });
  h+='</tbody></table>';
- h+=`<div class="small" style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">${["Extinct","Critical","Scarce","Stable","Abundant","Overpopulated"].map(r=>`<span style="color:${ratingColor(r)}">● ${r}</span>`).join("")}</div>`;
+ h+=`<div class="small" style="margin-top:12px"><strong>Population:</strong> ${["Extinct","Critical","Scarce","Stable","Abundant","Overpopulated"].map(r=>`<span style="color:${ratingColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
+ h+=`<div class="small" style="margin-top:6px"><strong>Body condition:</strong> ${["Fat","Normal","Thin"].map(r=>`<span style="color:${bodyConditionColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
+ h+=`<div class="small" style="margin-top:6px"><strong>Babies / carcasses / remains:</strong> ${["None","Few","Normal","Many"].map(r=>`<span style="color:${eventLevelColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
  if(y===0)h+='<p class="note">Year 0 has population state only; body condition and annual event outputs begin after the first simulated year.</p>';
  out.innerHTML=h;
 }
@@ -992,15 +1000,8 @@ function renderPopulationAverages(){
 }
 
 function populationRating(sp,pop){
- if(!(pop>0))return "extinct";
- const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
- if(expected<=0)return "stable";
- const ratio=pop/expected;
- if(ratio<0.1)return "critical";
- if(ratio<0.5)return "scarce";
- if(ratio<1.5)return "stable";
- if(ratio<2.5)return "abundant";
- return "overpopulated";
+ const label=populationRatingFor(sp,pop);
+ return ({Extinct:"extinct",Critical:"critical",Scarce:"scarce",Stable:"stable",Abundant:"abundant",Overpopulated:"over"})[label]||"stable";
 }
 function ratingLabel(r){return ({extinct:"Extinct",critical:"Critical",scarce:"Scarce",stable:"Stable",abundant:"Abundant",overpopulated:"Overpopulated"})[r]||r}
 function draw(){
