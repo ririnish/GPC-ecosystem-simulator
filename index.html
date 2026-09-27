@@ -39,7 +39,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.23</h1>
+<h1>GPC Ecosystem Simulator — v0.24</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -415,8 +415,13 @@ function selectedDiagnosticSpecies(id){
 }
 function escapeHtml(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 let nextSpeciesId=1;
+function newSpeciesId(){
+ let id;
+ do{id="sp"+(nextSpeciesId++);}while(species.some(s=>s.id===id));
+ return id;
+}
 function ensureSpeciesIds(){
- species.forEach(s=>{if(!s.id)s.id="sp"+(nextSpeciesId++);});
+ species.forEach(s=>{if(!s.id)s.id=newSpeciesId();});
 }
 function speciesNameById(id,fallback=""){
  const s=species.find(x=>x.id===id);return s?s.name:fallback;
@@ -490,7 +495,7 @@ function sync(){
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({id:"sp"+(nextSpeciesId++),name:"New Species",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors();refreshDiagnosticSpeciesFilters()}
 function refreshCopySpeciesSelect(){
  const sel=document.getElementById("copySpeciesSelect");if(!sel)return;
  ensureSpeciesIds();
@@ -499,14 +504,29 @@ function refreshCopySpeciesSelect(){
  if([...sel.options].some(o=>o.value===old))sel.value=old;
 }
 function copySpecies(){
- sync();ensureSpeciesIds();
  const sel=document.getElementById("copySpeciesSelect");if(!sel||!sel.value)return;
- const source=species.find(s=>s.id===sel.value);if(!source)return;
- const copy={...source,id:"sp"+(nextSpeciesId++),name:source.name+" Copy"};
- // Start the copied species from the source's authored starting population,
- // while giving it an independent simulation identity/history.
- copy.pop=copy.startPop;
- copy.expectedPop=copy.startPop;
+ const sourceId=sel.value;
+ sync();ensureSpeciesIds();
+ const source=species.find(s=>s.id===sourceId);if(!source)return;
+ const copy={
+   id:newSpeciesId(),
+   name:source.name+" Copy",
+   type:source.type ?? (source.survival<=0?"producer":"consumer"),
+   pop:source.startPop ?? source.pop,
+   startPop:source.startPop ?? source.pop,
+   expectedPop:source.startPop ?? source.pop,
+   capacity:source.capacity ?? 0,
+   regrowth:source.regrowth ?? 600,
+   minBirth:source.minBirth ?? 1,
+   maxBirth:source.maxBirth ?? 2,
+   lifespan:source.lifespan ?? 10,
+   survival:source.survival ?? 40,
+   reproSurplus:source.reproSurplus ?? 20,
+   edible:source.edible ?? 1,
+   pred:source.pred ?? 5,
+   prey:source.prey ?? "",
+   graph:source.graph!==false
+ };
  species.push(copy);
  renderEditors();refreshDiagnosticSpeciesFilters();
 }
