@@ -41,7 +41,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.39b</h1>
+<h1>GPC Ecosystem Simulator — v0.41</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -126,9 +126,9 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  <div class="section-head" onclick="toggleSection(this)"><h2>Analysis range</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
   <div class="graph-controls">
-   <label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" placeholder="Set range" oninput="analysisRangeChanged()"></label>
-   <label><span>To year</span><input id="graphTo" type="number" min="0" step="1" placeholder="Latest" oninput="analysisRangeChanged()"></label>
-   <button type="button" onclick="showLatestYears(25)">Latest 25</button><button type="button" onclick="showAllYears()">All years</button>
+   <label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" placeholder="Set range"></label>
+   <label><span>To year</span><input id="graphTo" type="number" min="0" step="1" placeholder="Latest"></label>
+   <button type="button" onclick="applyAnalysisRange()">Update</button><button type="button" onclick="showLatestYears(25)">Latest 25</button><button type="button" onclick="showAllYears()">All years</button>
   </div>
   <div class="graph-controls" style="margin-top:8px"><label><span>Jump to single year</span><input id="singleYear" type="number" min="1" step="1" placeholder="e.g. 9"></label><button type="button" onclick="showSingleYear()">View year</button></div>
   <p class="note">Leave the range blank to show the full Population History without rendering the large diagnostics tables. Set both From and To years (or use Latest 25 / View year) to populate Yearly and Monthly Diagnostics. Current State shows the selected endpoint, or the latest year when no range is set.</p>
@@ -138,7 +138,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 <div class="card" id="yearlyCard">
  <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
- <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div></div>
+ <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div>
+ <button type="button" onclick="applyDiagnosticSpeciesFilter('yearly')">Update</button></div>
  <p class="note">One row per species per year. Set an explicit Analysis Range before this table loads. Flows such as births and deaths are annual totals; survival-only and reproduction-eligible are monthly averages; population is the end-of-year active population.</p>
  <div id="yearlyDiagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
@@ -147,7 +148,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 <div class="card" id="monthlyCard">
  <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
- <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div></div>
+ <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div>
+ <button type="button" onclick="applyDiagnosticSpeciesFilter('monthly')">Update</button></div>
  <p class="note">Trace each monthly step to find the first value that goes off the rails. Set an explicit Analysis Range before this table loads.</p>
  <div id="diagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
@@ -164,11 +166,12 @@ function defaults(){
   {name:"Rabbit",emoji:"🐇",pop:5000,startPop:5000,expectedPop:5000,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Carrot",graph:true,invasive:false},
   {name:"Fox",emoji:"🦊",pop:100,startPop:100,expectedPop:100,capacity:0,regrowth:600,minBirth:2,maxBirth:7,lifespan:10,survival:100,reproSurplus:20,edible:8,pred:7,prey:"Rabbit, KILLER Rabbit",graph:true,invasive:false},
   {name:"Wolf",emoji:"🐺",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:4,lifespan:12,survival:150,reproSurplus:20,edible:30,pred:5,prey:"Fox",graph:true,invasive:false},
-  {name:"KILLER Rabbit",emoji:"🩸🐰",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Rabbit",graph:true,invasive:true}
+  {name:"KILLER Rabbit",emoji:"🩸🐰",referenceSpecies:"Rabbit",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Rabbit",graph:true,invasive:true}
  ];
 }
 function loadDefaults(){
  species=defaults();
+ensureSpeciesIds();
  species.forEach(s=>{ if(!Number.isFinite(s.startPop)) s.startPop=s.pop; if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop; });
  resetSim(true);
  renderEditors();
@@ -181,7 +184,7 @@ function resetSim(keep=false){
    if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop;
    s.pop=s.startPop;
  });
- year=0; history=[snapshot()]; lastStats={};
+ year=0; history=[snapshot()]; lastStats={}; appliedAnalysisRange=null;
  renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics();
 }
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
@@ -398,12 +401,12 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.39",
+   version:"v0.41",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
    species:species.map(s=>({
-     id:s.id,name:s.name,emoji:s.emoji||"",type:s.type ?? (s.survival<=0?"producer":"consumer"),
+     id:s.id,name:s.name,emoji:s.emoji||"",referenceSpecies:s.referenceSpecies||"",type:s.type ?? (s.survival<=0?"producer":"consumer"),
      startingPopulation:s.startPop,expectedPopulation:s.expectedPop,
      carryingCapacity:s.capacity,annualRegrowthPercent:s.regrowth,
      birthsPerYearPer2:[s.minBirth??null,s.maxBirth??null],lifespanYears:s.lifespan??null,
@@ -440,7 +443,7 @@ function importSimulation(data){
  let legacyMissingEncounter=false;
  species=data.species.map(x=>{
   if(x.encounterBaseline==null)legacyMissingEncounter=true;
-  return {id:x.id||newSpeciesId(),name:x.name||"Species",emoji:x.emoji||"",type:x.type,
+  return {id:x.id||newSpeciesId(),name:x.name||"Species",emoji:x.emoji||"",referenceSpecies:x.referenceSpecies||"",type:x.type,
    pop:Math.max(0,Number(x.currentPopulation)||0),startPop:Math.max(0,Number(x.startingPopulation)||0),expectedPop:Math.max(0,Number(x.expectedPopulation)||0),
    capacity:Math.max(0,Number(x.carryingCapacity)||0),regrowth:Number(x.annualRegrowthPercent)||0,
    minBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[0]:null,maxBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[1]:null,
@@ -482,16 +485,19 @@ function toggleDiagnostics(){
  d.style.display=d.style.display==="none"?"block":"none";
  if(d.style.display==="block")renderDiagnostics();
 }
+let appliedAnalysisRange=null;
+function applyAnalysisRange(){
+ const fromEl=document.getElementById("graphFrom"),toEl=document.getElementById("graphTo");
+ if(!fromEl||!toEl||fromEl.value===""||toEl.value===""){appliedAnalysisRange=null;draw();renderState();renderYearlyDiagnostics();renderDiagnostics();return;}
+ let from=Math.max(0,parseInt(fromEl.value,10)||0),to=Math.max(from,parseInt(toEl.value,10)||year);
+ appliedAnalysisRange={from,to:Math.min(to,year)};
+ draw();renderState();renderYearlyDiagnostics();renderDiagnostics();
+}
 function getAnalysisRange(){
- const fromEl=document.getElementById("graphFrom"),toEl=document.getElementById("graphTo");
- let from=fromEl&&fromEl.value!==""?Math.max(0,parseInt(fromEl.value,10)||0):0;
- let to=toEl&&toEl.value!==""?Math.max(from,parseInt(toEl.value,10)||year):year;
- return {from,to:Math.min(to,year)};
+ if(appliedAnalysisRange)return {...appliedAnalysisRange};
+ return {from:0,to:year};
 }
-function hasExplicitAnalysisRange(){
- const fromEl=document.getElementById("graphFrom"),toEl=document.getElementById("graphTo");
- return !!(fromEl && toEl && fromEl.value!=="" && toEl.value!=="");
-}
+function hasExplicitAnalysisRange(){return !!appliedAnalysisRange;}
 function refreshGraphSpeciesFilter(){
  const el=document.getElementById("graphSpeciesFilter"); if(!el)return;
  el.innerHTML=species.map((s,i)=>`<label class="filter-chip"><input type="checkbox" data-graph-index="${i}" ${s.graph!==false?'checked':''}>${escapeHtml(speciesDisplay(s))}</label>`).join("");
@@ -501,19 +507,27 @@ function refreshGraphSpeciesFilter(){
    draw();
  }));
 }
+let appliedDiagnosticFilters={yearly:null,monthly:null};
 function refreshDiagnosticSpeciesFilters(){
  ensureSpeciesIds();
- [["yearlySpeciesFilter",renderYearlyDiagnostics],["monthlySpeciesFilter",renderDiagnostics]].forEach(([id,renderFn])=>{
+ ["yearlySpeciesFilter","monthlySpeciesFilter"].forEach(id=>{
    const el=document.getElementById(id);if(!el)return;
    const old=new Set([...el.querySelectorAll('input:checked')].map(x=>x.value));
    const firstLoad=!el.querySelector('input');
-   el.innerHTML=species.map(s=>`<label class="filter-chip"><input type="checkbox" value="${escapeHtml(s.id)}" ${firstLoad||old.has(s.id)?'checked':''}>${escapeHtml(speciesDisplay(s))}</label>`).join("");
-   el.querySelectorAll('input').forEach(cb=>cb.addEventListener('change',renderFn));
+   el.innerHTML=species.map(sp=>`<label class="filter-chip"><input type="checkbox" value="${escapeHtml(sp.id)}" ${firstLoad||old.has(sp.id)?'checked':''}>${escapeHtml(speciesDisplay(sp))}</label>`).join("");
  });
+ if(!appliedDiagnosticFilters.yearly)appliedDiagnosticFilters.yearly=new Set(species.map(sp=>sp.id));
+ if(!appliedDiagnosticFilters.monthly)appliedDiagnosticFilters.monthly=new Set(species.map(sp=>sp.id));
+}
+function applyDiagnosticSpeciesFilter(kind){
+ const id=kind==="yearly"?"yearlySpeciesFilter":"monthlySpeciesFilter";
+ const el=document.getElementById(id);if(!el)return;
+ appliedDiagnosticFilters[kind]=new Set([...el.querySelectorAll('input:checked')].map(x=>x.value));
+ if(kind==="yearly")renderYearlyDiagnostics(); else renderDiagnostics();
 }
 function selectedDiagnosticSpecies(id){
- const el=document.getElementById(id);
- return el?new Set([...el.querySelectorAll('input:checked')].map(x=>x.value)):new Set(species.map(s=>s.id));
+ const kind=id==="yearlySpeciesFilter"?"yearly":"monthly";
+ return appliedDiagnosticFilters[kind]||new Set(species.map(sp=>sp.id));
 }
 function escapeHtml(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 let nextSpeciesId=1;
@@ -589,6 +603,7 @@ function sync(){
    };
    sp.name=String(val("name",sp.name));
    sp.emoji=String(val("emoji",sp.emoji ?? "")).trim();
+   sp.referenceSpecies=String(val("referenceSpecies",sp.referenceSpecies ?? "")).trim();
    sp.startPop=Math.max(0,val("pop",sp.startPop ?? sp.pop));
    if(get("type"))sp.type=String(val("type",sp.type ?? (sp.survival<=0?"producer":"consumer")));
    // Species type is explicit. Keep survival=0 as the simulation's producer flag;
@@ -610,7 +625,7 @@ function sync(){
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",emoji:"",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",emoji:"",referenceSpecies:"",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false});renderEditors();refreshDiagnosticSpeciesFilters()}
 function refreshCopySpeciesSelect(){
  const sel=document.getElementById("copySpeciesSelect");if(!sel)return;
  ensureSpeciesIds();
@@ -627,6 +642,7 @@ function copySpecies(){
    id:newSpeciesId(),
    name:source.name+" Copy",
     emoji:source.emoji||"",
+    referenceSpecies:source.referenceSpecies||"",
    type:source.type ?? (source.survival<=0?"producer":"consumer"),
    pop:source.startPop ?? source.pop,
    startPop:source.startPop ?? source.pop,
@@ -662,6 +678,7 @@ function renderEditors(full=true){
   d.innerHTML=`<div class="grid">
    ${field("Name","name",s.name,"text")}
    ${field("Emoji name (optional)","emoji",s.emoji ?? "","text")}
+   ${field("Reference species (population health; invasive only)","referenceSpecies",s.referenceSpecies ?? "","text")}
    ${field("Starting population","pop",round(s.startPop ?? s.pop))}
    <label><span>Species type</span><select data-k="type"><option value="consumer" ${producer?"":"selected"}>Consumer</option><option value="producer" ${producer?"selected":""}>Producer</option></select></label>
    <label><span>Invasive species</span><span style="display:flex;align-items:center;gap:8px;min-height:38px"><input data-k="invasive" type="checkbox" style="width:auto" ${s.invasive?"checked":""}> Is invasive</span></label>
@@ -694,12 +711,14 @@ function renderEditors(full=true){
 }
 
 function refreshAnchor(){
- const sel=document.getElementById("anchorSpecies"),old=sel.value;
- const opts=species.filter(s=>!s.invasive&&s.survival>0);
- sel.innerHTML=opts.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
- if(old&&opts.some(s=>s.id===old))sel.value=old;
+ const sel=document.getElementById("anchorSpecies");if(!sel)return;
+ const hadOptions=sel.options.length>0;
+ const old=hadOptions?sel.value:"";
+ const opts=species.filter(sp=>!sp.invasive&&(sp.survival||0)>0);
+ sel.innerHTML=opts.map(sp=>`<option value="${sp.id}">${escapeHtml(sp.name)}</option>`).join("");
+ if(old&&opts.some(sp=>sp.id===old))sel.value=old;
  else {
-   const wolf=opts.find(s=>s.name==="Wolf");
+   const wolf=opts.find(sp=>sp.name==="Wolf");
    if(wolf)sel.value=wolf.id;
    else if(opts.length)sel.value=opts[opts.length-1].id;
  }
@@ -881,19 +900,35 @@ function fmt(x){return Math.round(x).toLocaleString()}
 
 function showLatestYears(n){
  const from=document.getElementById("graphFrom"),to=document.getElementById("graphTo");
- from.value=Math.max(0,year-n);to.value=year;analysisRangeChanged();
+ from.value=Math.max(0,year-n);to.value=year;applyAnalysisRange();
 }
 function showAllYears(){
- document.getElementById("graphFrom").value="";document.getElementById("graphTo").value="";analysisRangeChanged();
+ document.getElementById("graphFrom").value="";document.getElementById("graphTo").value="";applyAnalysisRange();
 }
 function showSingleYear(){
  const el=document.getElementById("singleYear");let y=Math.max(1,Math.min(year,parseInt(el.value,10)||year));
- document.getElementById("graphFrom").value=y;document.getElementById("graphTo").value=y;analysisRangeChanged();
+ document.getElementById("graphFrom").value=y;document.getElementById("graphTo").value=y;applyAnalysisRange();
 }
 
+function ratingColor(r){
+ return ({Extinct:"#555",Critical:"#d32f2f",Scarce:"#e58b2a",Stable:"#5c9b62",Abundant:"#4285c5",Overpopulated:"#9454a8"})[r]||"inherit";
+}
+function populationReferenceFor(sp){
+ if(!sp.invasive)return Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
+ const refName=String(sp.referenceSpecies||"").trim();
+ const ref=refName?species.find(n=>n.name===refName):null;
+ if(ref){
+   const v=Math.max(0,Number.isFinite(ref.expectedPop)?ref.expectedPop:ref.startPop);
+   if(v>0)return v;
+ }
+ // If no valid reference is authored, do not pretend the introduction population
+ // is a healthy invasive baseline. Treat status as unavailable until one is supplied.
+ return null;
+}
 function populationRatingFor(sp,pop){
- const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
- if(pop<=0)return "Extinct"; if(expected<=0)return "Stable";
+ const expected=populationReferenceFor(sp);
+ if(pop<=0)return "Extinct";
+ if(!(expected>0))return "—";
  const ratio=pop/expected; if(ratio<.1)return "Critical"; if(ratio<.5)return "Scarce"; if(ratio<1.5)return "Stable"; if(ratio<2.5)return "Abundant"; return "Overpopulated";
 }
 function bodyConditionFor(sp,row){
@@ -928,9 +963,11 @@ function renderVisualizationOutput(){
    const babies=row?rateCategory(row.births||0,avgPop,baseline?.births):"—";
    const carcasses=row?rateCategory((row.naturalDeaths||0)+(row.starvation||0),avgPop,baseline?.carcasses):"—";
    const remains=row?rateCategory(row.predDeaths||0,avgPop,baseline?.remains):"—";
-   h+=`<tr><td>${esc(speciesDisplay(sp))}</td><td>${populationRatingFor(sp,pop)}</td><td>${bodyConditionFor(sp,row)}</td><td>${babies}</td><td>${carcasses}</td><td>${remains}</td></tr>`;
+   const rating=populationRatingFor(sp,pop),color=ratingColor(rating);
+   h+=`<tr style="color:${color}"><td>${esc(speciesDisplay(sp))}</td><td>${rating}</td><td>${bodyConditionFor(sp,row)}</td><td>${babies}</td><td>${carcasses}</td><td>${remains}</td></tr>`;
  });
  h+='</tbody></table>';
+ h+=`<div class="small" style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">${["Extinct","Critical","Scarce","Stable","Abundant","Overpopulated"].map(r=>`<span style="color:${ratingColor(r)}">● ${r}</span>`).join("")}</div>`;
  if(y===0)h+='<p class="note">Year 0 has population state only; body condition and annual event outputs begin after the first simulated year.</p>';
  out.innerHTML=h;
 }
