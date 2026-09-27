@@ -15,7 +15,15 @@ button.primary{background:#17201b;color:white;border-color:#17201b}
 button.danger{color:#8b1e1e}
 input,select{font:inherit;padding:8px;border:1px solid #c7cec9;border-radius:8px;min-width:0;width:100%}
 table{width:100%;border-collapse:collapse;font-size:.9rem} th,td{padding:7px 5px;border-bottom:1px solid #edf0ed;text-align:right}
-#diagnostics thead th{position:sticky;top:0;z-index:2;background:#fff;box-shadow:0 1px 0 #d9ddd8}
+#diagnostics thead th{position:sticky;top:0;z-index:4;background:#fff;box-shadow:0 1px 0 #d9ddd8}
+#diagnostics th:nth-child(1),#diagnostics td:nth-child(1){position:sticky;left:0;z-index:3;background:#fff;min-width:42px}
+#diagnostics th:nth-child(2),#diagnostics td:nth-child(2){position:sticky;left:42px;z-index:3;background:#fff;min-width:38px}
+#diagnostics th:nth-child(3),#diagnostics td:nth-child(3){position:sticky;left:80px;z-index:3;background:#fff;min-width:90px;box-shadow:2px 0 0 #d9ddd8}
+#diagnostics thead th:nth-child(-n+3){z-index:6}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.section-head h2{font-size:1.1rem;margin:0}.collapse-btn{padding:6px 10px;min-width:42px}.section-body{margin-top:12px}.section-body.collapsed{display:none}
+.note-toggle{margin-top:10px}.note-toggle summary{cursor:pointer;font-size:.8rem;color:#68736c}.note-toggle .note{margin:.6rem 0 0}
+.graph-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:8px 0 10px}.graph-controls label{width:120px}.graph-controls button{padding:8px 11px}
 th:first-child,td:first-child{text-align:left}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:8px}
 label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px}
@@ -26,7 +34,7 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.10</h1>
+<h1>GPC Ecosystem Simulator — v0.11</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card">
@@ -37,11 +45,12 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
   <button onclick="run(500)">Run 500</button>
   <button onclick="resetSim()">Reset</button>
  </div>
- <p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. A deferred-maturation proxy keeps newborn consumers out of the active population until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step.</p>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. A deferred-maturation proxy keeps newborn consumers out of the active population until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step.</p></details>
 </div>
 
 <div class="card">
- <h2 style="font-size:1.1rem;margin-top:0">Auto-balance starting populations</h2>
+ <div class="section-head" onclick="toggleSection(this)"><h2>Auto-balance starting populations</h2><button class="collapse-btn" type="button">−</button></div>
+ <div class="section-body">
  <p class="note">Pick one consumer as the anchor. The calculator works down the food web, estimating prey populations needed to provide each predator with its survival food plus reproduction surplus. These are initialization estimates, not guaranteed equilibrium values.</p>
  <div class="balance-grid">
   <label><span>Anchor species</span><select id="anchor"></select></label>
@@ -49,28 +58,38 @@ canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;backg
   <button class="primary" onclick="autoBalance()">Auto-balance</button>
  </div>
  <div id="balanceStatus" class="status">Choose an anchor and calculate a food-supported starting ecosystem.</div>
+ </div>
 </div>
 
 <div class="card">
- <h2 style="font-size:1.1rem;margin-top:0">Species</h2>
+ <div class="section-head" onclick="toggleSection(this)"><h2>Species</h2><button class="collapse-btn" type="button">−</button></div>
+ <div class="section-body">
  <div id="editors"></div>
  <div class="row" style="margin-top:12px"><button onclick="addSpecies()">+ Add species</button><button onclick="loadDefaults()">Restore demo ecosystem</button></div>
+ </div>
 </div>
 
 <div class="card">
- <div class="row" style="justify-content:space-between"><h2 style="font-size:1.1rem;margin:0">Monthly diagnostics</h2><button onclick="toggleDiagnostics()">Show / hide</button></div>
+ <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
+ <div class="section-body">
  <p class="note">Trace each monthly step to find the first value that goes off the rails.</p>
- <div id="diagnostics" style="display:none;overflow:auto;max-height:520px"></div>
+ <div id="diagnostics" style="overflow:auto;max-height:520px"></div>
+ </div>
 </div>
 <div class="card">
- <div class="row" style="justify-content:space-between"><h2 style="font-size:1.1rem;margin:0">Current state</h2><strong>Year <span id="year">0</span></strong></div>
+ <div class="section-head" onclick="toggleSection(this)"><h2>Current state</h2><div class="row"><strong>Year <span id="year">0</span></strong><button class="collapse-btn" type="button">−</button></div></div>
+ <div class="section-body">
  <div style="overflow:auto"><table><thead><tr><th>Species</th><th>Population</th><th>Food %</th><th>Repro eligible</th><th>Births</th><th>Natural deaths</th><th>Predation deaths</th><th>Starvation deaths</th></tr></thead><tbody id="state"></tbody></table></div>
+ </div>
 </div>
 
 <div class="card">
- <h2 style="font-size:1.1rem;margin-top:0">Population history</h2>
+ <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button">−</button></div>
+ <div class="section-body">
+ <div class="graph-controls"><label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" value="0" oninput="draw()"></label><label><span>To year</span><input id="graphTo" type="number" min="0" step="1" placeholder="Latest" oninput="draw()"></label><button type="button" onclick="showLatestYears(25)">Latest 25</button><button type="button" onclick="showAllYears()">All years</button></div>
  <canvas id="chart"></canvas>
- <p class="note">Only species with “Show on graph” checked are plotted and included in graph scaling. Tap/run repeatedly to watch whether populations settle, oscillate, explode, or commit ecological suicide.</p>
+ <p class="note">Only species with “Show on graph” checked are plotted and included in graph scaling. Choose a year range above to zoom the history view. Tap/run repeatedly to watch whether populations settle, oscillate, explode, or commit ecological suicide.</p>
+ </div>
 </div>
 
 <script>
@@ -289,6 +308,12 @@ function stepMonth(annualBreedingPool,deferredBirths,monthNo){
  renderDiagnostics();
 }
 
+function toggleSection(head){
+ const body=head.nextElementSibling;
+ const btn=head.querySelector(".collapse-btn");
+ const collapsed=body.classList.toggle("collapsed");
+ if(btn)btn.textContent=collapsed?"+":"−";
+}
 function toggleDiagnostics(){
  const d=document.getElementById("diagnostics");
  d.style.display=d.style.display==="none"?"block":"none";
@@ -471,24 +496,45 @@ function renderState(){
 }
 function fmt(x){return Math.round(x).toLocaleString()}
 
+function showLatestYears(n){
+ const from=document.getElementById("graphFrom"),to=document.getElementById("graphTo");
+ from.value=Math.max(0,year-n);to.value=year;draw();
+}
+function showAllYears(){
+ document.getElementById("graphFrom").value=0;document.getElementById("graphTo").value="";draw();
+}
 function draw(){
  const c=document.getElementById("chart"),ctx=c.getContext("2d");
  const dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);
  ctx.clearRect(0,0,w,h);
- let pad=35, data=history.slice(-250); if(data.length<2)return;
+ const fromEl=document.getElementById("graphFrom"),toEl=document.getElementById("graphTo");
+ let from=fromEl&&fromEl.value!==""?Math.max(0,parseInt(fromEl.value,10)||0):0;
+ let to=toEl&&toEl.value!==""?Math.max(from,parseInt(toEl.value,10)||year):year;
+ let data=history.filter(r=>r.year>=from&&r.year<=to);
+ if(data.length<2){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("Run more years or widen the graph range.",45,45);return;}
  let shown=species.filter(s=>s.graph!==false);
- if(!shown.length){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("No species selected for graph.",pad,40);return;}
+ const padL=52,padR=18,padT=30,padB=38;
+ if(!shown.length){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("No species selected for graph.",padL,45);return;}
  let max=1;data.forEach(r=>shown.forEach(s=>max=Math.max(max,r[s.name]||0)));
  ctx.strokeStyle="#dfe4e0";ctx.lineWidth=1;
- for(let j=0;j<=4;j++){let y=pad+(h-2*pad)*j/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}
+ for(let j=0;j<=4;j++){let y=padT+(h-padT-padB)*j/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(w-padR,y);ctx.stroke()}
+ const minYear=data[0].year,maxYear=data[data.length-1].year,span=Math.max(1,maxYear-minYear);
+ const xForYear=y=>padL+(w-padL-padR)*(y-minYear)/span;
+ // X-axis year labels.
+ ctx.fillStyle="#657069";ctx.font="11px system-ui";ctx.textAlign="center";
+ const ticks=Math.min(6,Math.max(2,Math.floor((w-padL-padR)/65)));
+ for(let i=0;i<ticks;i++){
+   const yr=Math.round(minYear+(maxYear-minYear)*i/(ticks-1));
+   const x=xForYear(yr);ctx.beginPath();ctx.moveTo(x,h-padB);ctx.lineTo(x,h-padB+4);ctx.stroke();ctx.fillText(String(yr),x,h-padB+18);
+ }
  const colors=["#2b6f47","#b86b25","#496fb5","#8b4ba5","#c44f57","#4f8d91","#7a6a42","#555"];
  shown.forEach((s,si)=>{
   ctx.strokeStyle=colors[si%colors.length];ctx.lineWidth=2;ctx.beginPath();
-  data.forEach((r,j)=>{let x=pad+(w-2*pad)*j/(data.length-1), y=h-pad-(h-2*pad)*(r[s.name]||0)/max;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  data.forEach((r,j)=>{let x=xForYear(r.year), y=h-padB-(h-padT-padB)*(r[s.name]||0)/max;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});
   ctx.stroke();
  });
- ctx.font="12px system-ui";shown.forEach((s,i)=>{ctx.fillStyle=colors[i%colors.length];ctx.fillText(s.name,pad+i*75,16)});
- ctx.fillStyle="#657069";ctx.fillText("0",5,h-pad+4);ctx.fillText(Math.round(max).toLocaleString(),5,pad+4);
+ ctx.textAlign="left";ctx.font="12px system-ui";shown.forEach((s,i)=>{ctx.fillStyle=colors[i%colors.length];ctx.fillText(s.name,padL+i*75,16)});
+ ctx.fillStyle="#657069";ctx.fillText("0",5,h-padB+4);ctx.fillText(Math.round(max).toLocaleString(),5,padT+4);
 }
 window.addEventListener("resize",draw);
 species=defaults();renderEditors();resetSim(true);refreshAnchor();
