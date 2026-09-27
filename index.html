@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GPC Ecosystem Simulator</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17201b;background:#f5f3ea}
+*{box-sizing:border-box} body{margin:0;padding:16px;max-width:1100px;margin:auto}
+h1{font-size:1.55rem;margin:.25rem 0}.sub{color:#58635c;margin:.2rem 0 1rem}
+.card{background:white;border:1px solid #d9ddd8;border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 2px 8px #0000000a}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;border:1px solid #aab3ad;background:#fff;border-radius:10px;padding:10px 13px;cursor:pointer}
+button.primary{background:#17201b;color:white;border-color:#17201b}
+button.danger{color:#8b1e1e}
+input,select{font:inherit;padding:8px;border:1px solid #c7cec9;border-radius:8px;min-width:0;width:100%}
+table{width:100%;border-collapse:collapse;font-size:.9rem} th,td{padding:7px 5px;border-bottom:1px solid #edf0ed;text-align:right}
+#diagnostics thead th{position:sticky;top:0;z-index:2;background:#fff;box-shadow:0 1px 0 #d9ddd8}
+th:first-child,td:first-child{text-align:left}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:8px}
+label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px}
+.species{border-top:1px solid #eee;padding-top:12px;margin-top:12px}
+canvas{width:100%;height:320px;border:1px solid #e1e5e2;border-radius:10px;background:#fff}
+.note{font-size:.8rem;color:#68736c}.balance-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end}.status{margin-top:10px;padding:10px;border-radius:9px;background:#f5f7f5;font-size:.86rem;white-space:pre-line}@media(max-width:600px){.balance-grid{grid-template-columns:1fr 1fr}.balance-grid button{grid-column:1/-1}}
+@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}table{font-size:.78rem}th,td{padding:6px 3px}.hide-mobile{display:none}}
+</style>
+</head>
+<body>
+<h1>GPC Ecosystem Simulator — v0.10</h1>
+<p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
+
+<div class="card">
+ <div class="row">
+  <button class="primary" onclick="run(1)">Run 1 year</button>
+  <button onclick="run(10)">Run 10</button>
+  <button onclick="run(100)">Run 100</button>
+  <button onclick="run(500)">Run 500</button>
+  <button onclick="resetSim()">Reset</button>
+ </div>
+ <p class="note">“Starting population” is initialization data and Reset restores it. Auto-balance calculates a food-supported starting web from one anchor population. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. A deferred-maturation proxy keeps newborn consumers out of the active population until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step.</p>
+</div>
+
+<div class="card">
+ <h2 style="font-size:1.1rem;margin-top:0">Auto-balance starting populations</h2>
+ <p class="note">Pick one consumer as the anchor. The calculator works down the food web, estimating prey populations needed to provide each predator with its survival food plus reproduction surplus. These are initialization estimates, not guaranteed equilibrium values.</p>
+ <div class="balance-grid">
+  <label><span>Anchor species</span><select id="anchor"></select></label>
+  <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="10"></label>
+  <button class="primary" onclick="autoBalance()">Auto-balance</button>
+ </div>
+ <div id="balanceStatus" class="status">Choose an anchor and calculate a food-supported starting ecosystem.</div>
+</div>
+
+<div class="card">
+ <h2 style="font-size:1.1rem;margin-top:0">Species</h2>
+ <div id="editors"></div>
+ <div class="row" style="margin-top:12px"><button onclick="addSpecies()">+ Add species</button><button onclick="loadDefaults()">Restore demo ecosystem</button></div>
+</div>
+
+<div class="card">
+ <div class="row" style="justify-content:space-between"><h2 style="font-size:1.1rem;margin:0">Monthly diagnostics</h2><button onclick="toggleDiagnostics()">Show / hide</button></div>
+ <p class="note">Trace each monthly step to find the first value that goes off the rails.</p>
+ <div id="diagnostics" style="display:none;overflow:auto;max-height:520px"></div>
+</div>
+<div class="card">
+ <div class="row" style="justify-content:space-between"><h2 style="font-size:1.1rem;margin:0">Current state</h2><strong>Year <span id="year">0</span></strong></div>
+ <div style="overflow:auto"><table><thead><tr><th>Species</th><th>Population</th><th>Food %</th><th>Repro eligible</th><th>Births</th><th>Natural deaths</th><th>Predation deaths</th><th>Starvation deaths</th></tr></thead><tbody id="state"></tbody></table></div>
+</div>
+
+<div class="card">
+ <h2 style="font-size:1.1rem;margin-top:0">Population history</h2>
+ <canvas id="chart"></canvas>
+ <p class="note">Only species with “Show on graph” checked are plotted and included in graph scaling. Tap/run repeatedly to watch whether populations settle, oscillate, explode, or commit ecological suicide.</p>
+</div>
+
+<script>
+let diagnosticRows=[];
+
+let species=[], year=0, history=[], lastStats={};
+
+function defaults(){
+ return [
+  {name:"Carrot",pop:50000,startPop:50000,capacity:60000,regrowth:600,survival:0,edible:0.1,pred:0,graph:false},
+  {name:"Rabbit",pop:5000,startPop:5000,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Carrot",graph:true},
+  {name:"Fox",pop:100,startPop:100,capacity:0,regrowth:600,minBirth:2,maxBirth:7,lifespan:10,survival:100,reproSurplus:20,edible:8,pred:7,prey:"Rabbit",graph:true},
+  {name:"Wolf",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:4,lifespan:12,survival:150,reproSurplus:20,edible:30,pred:5,prey:"Fox",graph:true}
+ ];
+}
+function loadDefaults(){
+ species=defaults();
+ species.forEach(s=>{ if(!Number.isFinite(s.startPop)) s.startPop=s.pop; });
+ resetSim(true);
+ renderEditors();
+}
+function resetSim(keep=false){
+ if(!keep) sync();
+ species.forEach(s=>{
+   if(!Number.isFinite(s.capacity)) s.capacity=0;
+   if(!Number.isFinite(s.startPop)) s.startPop=Number.isFinite(s.pop)?s.pop:0;
+   s.pop=s.startPop;
+ });
+ year=0; history=[snapshot()]; lastStats={};
+ renderEditors(); renderState(); draw();
+}
+function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
+function rnd(a,b){return a+Math.random()*(b-a)}
+function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
+
+function step(){
+ sync();
+ species.forEach(sp=>{if(!Number.isFinite(sp.pop)||sp.pop<0)sp.pop=0});
+ lastStats={};
+ // Deferred maturation proxy: consumer offspring produced during the year are
+ // accumulated off-population. They do not eat, hunt, get hunted, or reproduce
+ // until they mature into the active population at the end of the year.
+ // This captures the stabilizing generation delay without a full juvenile system.
+ const annualBreedingPool=species.map(sp=>Math.max(0,sp.pop));
+ const deferredBirths=new Array(species.length).fill(0);
+ for(let month=0;month<12;month++)stepMonth(annualBreedingPool,deferredBirths,month+1);
+ species.forEach((sp,i)=>{ if(sp.survival>0) sp.pop+=deferredBirths[i]; });
+ year++;
+ history.push(snapshot());
+}
+
+function stepMonth(annualBreedingPool,deferredBirths,monthNo){
+ const dt=1/12,start=species.map(sp=>Math.max(0,sp.pop));
+ const obtained=new Array(species.length).fill(0),preyLossKg=new Array(species.length).fill(0);
+ const monthDiag=species.map((sp,i)=>({year:year+1,month:monthNo,species:sp.name,start:start[i],predDeaths:0,postPred:0,foodRequired:0,foodObtained:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,end:0}));
+
+ // PHASE A: Resolve predation first, simultaneously, from the same start-of-month snapshot.
+ // Predators have a finite monthly maintenance + reproduction-surplus demand here.
+ // This prevents doomed prey from eating their own food before being killed, while
+ // still allowing predators to acquire the surplus needed to reproduce.
+ let huntRequests=[];
+ species.forEach((pred,pi)=>{
+   if(pred.survival<=0||start[pi]<=0)return;
+   const opts=(pred.prey||"").split(",").map(x=>x.trim()).filter(Boolean)
+     .map(n=>species.findIndex(s=>s.name===n)).filter(qi=>qi>=0&&species[qi].survival>0&&start[qi]>0);
+   if(!opts.length)return;
+   // Reproduction Surplus has two linked meanings in the population abstraction:
+   // r is the extra ration cost of a reproducing individual, while (1-r) is the
+   // species' reproductive tendency.  Predators therefore seek only enough food
+   // to support their authored reproduce/survive mixture -- not a full surplus
+   // ration for every individual.
+   const r=Math.min(1,Math.max(0,(pred.reproSurplus||0)/100));
+   const reproTendency=1-r;
+   const avgRationCost=reproTendency*(1+r)+(1-reproTendency);
+   const desired=start[pi]*pred.survival*dt*avgRationCost;
+   let weights=opts.map(qi=>{
+     const prey=species[qi],eff=hunt(pred.pred,prey.pred);
+     return {qi,eff,effective:start[qi]*Math.max(0,prey.edible)*eff};
+   }).filter(x=>x.effective>0);
+   const total=weights.reduce((a,x)=>a+x.effective,0);
+   if(total<=0)return;
+   weights.forEach(x=>huntRequests.push({pi,qi:x.qi,kg:desired*x.effective/total,effective:x.effective}));
+ });
+
+ let byPrey={};
+ huntRequests.forEach(r=>(byPrey[r.qi]??=[]).push(r));
+ Object.entries(byPrey).forEach(([qis,rs])=>{
+   const qi=+qis,physical=start[qi]*Math.max(0,species[qi].edible);
+   const requested=rs.reduce((a,r)=>a+r.kg,0);
+   const catchable=Math.min(physical,rs.reduce((a,r)=>a+r.effective,0));
+   const scale=requested>0?Math.min(1,catchable/requested):0;
+   rs.forEach(r=>{
+     const kg=r.kg*scale;
+     obtained[r.pi]+=kg;
+     preyLossKg[qi]+=kg;
+   });
+ });
+
+ // PHASE B: subtract all predation deaths simultaneously.
+ const afterPred=start.map((p,i)=>{
+   const edible=Math.max(0,species[i].edible);
+   const killed=edible>0?Math.min(p,preyLossKg[i]/edible):0;
+   lastStats[i]??={births:0,natural:0,predation:0,starve:0,food:0,eligible:0};
+   lastStats[i].predation+=killed;
+   monthDiag[i].predDeaths=killed;
+   monthDiag[i].postPred=Math.max(0,p-killed);
+   return Math.max(0,p-killed);
+ });
+
+ // PHASE C: surviving consumers now feed. For prey that are producers/non-consumers,
+ // this is where herbivory occurs. Consumer-vs-consumer food obtained during Phase A
+ // already counts toward the predator's monthly food.
+ let feedRequests=[];
+ species.forEach((consumer,ci)=>{
+   if(consumer.survival<=0||afterPred[ci]<=0)return;
+   const monthlySurvival=consumer.survival*dt;
+   const r=Math.min(1,Math.max(0,(consumer.reproSurplus||0)/100));
+   const reproTendency=1-r;
+   const avgRationCost=reproTendency*(1+r)+(1-reproTendency);
+   const target=afterPred[ci]*monthlySurvival*avgRationCost;
+   const stillNeeded=Math.max(0,target-obtained[ci]);
+   if(stillNeeded<=0)return;
+
+   const opts=(consumer.prey||"").split(",").map(x=>x.trim()).filter(Boolean)
+     .map(n=>species.findIndex(s=>s.name===n))
+     // Only feed here on producer/non-feeding prey; animal predation was Phase A.
+     .filter(qi=>qi>=0&&species[qi].survival<=0&&afterPred[qi]>0);
+   if(!opts.length)return;
+
+   let weights=opts.map(qi=>{
+     const prey=species[qi],eff=hunt(consumer.pred,prey.pred);
+     return {qi,eff,effective:afterPred[qi]*Math.max(0,prey.edible)*eff};
+   }).filter(x=>x.effective>0);
+   const total=weights.reduce((a,x)=>a+x.effective,0);
+   if(total<=0)return;
+   weights.forEach(x=>feedRequests.push({ci,qi:x.qi,kg:stillNeeded*x.effective/total,effective:x.effective}));
+ });
+
+ let byFood={};
+ feedRequests.forEach(r=>(byFood[r.qi]??=[]).push(r));
+ Object.entries(byFood).forEach(([qis,rs])=>{
+   const qi=+qis,physical=afterPred[qi]*Math.max(0,species[qi].edible);
+   const requested=rs.reduce((a,r)=>a+r.kg,0);
+   const catchable=Math.min(physical,rs.reduce((a,r)=>a+r.effective,0));
+   const scale=requested>0?Math.min(1,catchable/requested):0;
+   rs.forEach(r=>{
+     const kg=r.kg*scale;
+     obtained[r.ci]+=kg;
+     preyLossKg[qi]+=kg; // producer biomass eaten
+   });
+ });
+
+ // Apply producer herbivory after surviving herbivores have fed.
+ const afterFeeding=afterPred.map((p,i)=>{
+   if(species[i].survival>0)return p; // animal predation already removed above
+   const edible=Math.max(0,species[i].edible);
+   const eaten=edible>0?Math.min(p,preyLossKg[i]/edible):0;
+   lastStats[i].predation+=eaten;
+   monthDiag[i].producerConsumed=eaten;
+   return Math.max(0,p-eaten);
+ });
+
+ // PHASE D/E: natural mortality, starvation/reproductive eligibility, births/regrowth.
+ species.forEach((sp,i)=>{
+   lastStats[i]??={births:0,natural:0,predation:0,starve:0,food:0,eligible:0};
+   const base=afterFeeding[i];
+   const natural=sp.lifespan>0?Math.min(base,base/sp.lifespan*dt):0;
+   let alive=Math.max(0,base-natural);lastStats[i].natural+=natural;monthDiag[i].naturalDeaths=natural;
+
+   if(sp.survival>0){
+     const survival=sp.survival*dt,food=obtained[i];
+     const r=Math.min(1,Math.max(0,(sp.reproSurplus||0)/100));
+     const reproTendency=1-r;
+     // Average ration cost of the authored cohort mixture:
+     // reproducing animals cost (1+r) survival rations; survival-only animals cost 1.
+     const avgRationCost=reproTendency*(1+r)+(1-reproTendency);
+     monthDiag[i].foodRequired=afterPred[i]*survival;
+     monthDiag[i].foodObtained=food;
+     lastStats[i].food+=food;
+
+     // "food" is one conserved acquired-food pool.  Divide it into the species'
+     // reproduce/survive mixture instead of feeding everyone first.  This permits
+     // reproduction and starvation in the same month without double-counting prey.
+     const supported=survival>0?Math.min(alive,food/(survival*avgRationCost)):alive;
+     const desiredEligible=supported*reproTendency;
+     const eligible=Math.min(desiredEligible,Math.max(0,annualBreedingPool?.[i]??supported));
+     const surviveOnly=Math.max(0,supported-eligible);
+     monthDiag[i].starvation=Math.max(0,alive-supported);lastStats[i].starve+=monthDiag[i].starvation;
+     monthDiag[i].surviveOnly=surviveOnly;
+     monthDiag[i].reproEligible=eligible;
+     lastStats[i].eligible+=eligible/12;
+     const births=(eligible/2)*rnd(sp.minBirth,sp.maxBirth)*dt;monthDiag[i].births=births;
+     lastStats[i].births+=births;
+     deferredBirths[i]+=births;
+     sp.pop=Math.max(0,supported);
+   }else{
+     let growth=0;
+     if(sp.capacity>0){
+       // Producer regeneration is independent of surviving edible individuals.
+       // Even if grazing reduces standing carrots to zero, the seed bank/habitat
+       // can regenerate them up to the monthly throughput and carrying capacity.
+       const monthlyPotential=sp.capacity*((sp.regrowth||0)/100)*dt;
+       growth=Math.min(monthlyPotential,Math.max(0,sp.capacity-alive));
+       sp.pop=Math.min(sp.capacity,alive+growth);
+     }else{
+       // A producer with no carrying capacity has no configured regeneration.
+       growth=0;
+       sp.pop=Math.max(0,alive);
+     }
+     monthDiag[i].regrowth=growth;
+     lastStats[i].births+=growth;
+   }
+   monthDiag[i].end=sp.pop;
+ });
+ diagnosticRows.push(...monthDiag);
+ renderDiagnostics();
+}
+
+function toggleDiagnostics(){
+ const d=document.getElementById("diagnostics");
+ d.style.display=d.style.display==="none"?"block":"none";
+ if(d.style.display==="block")renderDiagnostics();
+}
+function renderDiagnostics(){
+ const d=document.getElementById("diagnostics");if(!d)return;
+ const rows=diagnosticRows.slice(-96);
+ if(!rows.length){d.innerHTML='<p class="note">Run at least one year to generate a monthly trace.</p>';return;}
+ const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
+ let h='<table><thead><tr><th>Yr</th><th>Mo</th><th>Species</th><th>Start</th><th>Pred deaths</th><th>Post-pred</th><th>Food req kg</th><th>Food got kg</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Survive only</th><th>Repro eligible</th><th>Births</th><th>Regrowth</th><th>End active</th></tr></thead><tbody>';
+ rows.forEach(r=>h+=`<tr><td>${r.year}</td><td>${r.month}</td><td>${r.species}</td><td>${f(r.start)}</td><td>${f(r.predDeaths)}</td><td>${f(r.postPred)}</td><td>${f(r.foodRequired)}</td><td>${f(r.foodObtained)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td><td>${f(r.end)}</td></tr>`);
+ d.innerHTML=h+'</tbody></table>';
+}
+
+function run(n){for(let i=0;i<n;i++)step();renderState();draw()}
+
+function sync(){
+ document.querySelectorAll(".species").forEach((d,i)=>{
+   const sp=species[i];
+   const get=k=>d.querySelector(`[data-k="${k}"]`);
+   const val=(k,fallback)=>{
+     const el=get(k); if(!el)return fallback;
+     if(el.type==="checkbox")return el.checked;
+     if(el.type==="number"){const n=parseFloat(el.value);return Number.isFinite(n)?n:fallback;}
+     return el.value;
+   };
+   sp.name=String(val("name",sp.name));
+   sp.startPop=Math.max(0,val("pop",sp.startPop ?? sp.pop));
+   // Only update properties whose controls exist for this species type.
+   if(get("capacity"))sp.capacity=Math.max(0,val("capacity",sp.capacity ?? 0));
+   if(get("regrowth"))sp.regrowth=Math.max(0,val("regrowth",sp.regrowth ?? 600));
+   if(get("minBirth"))sp.minBirth=Math.max(0,val("minBirth",sp.minBirth ?? 0));
+   if(get("maxBirth"))sp.maxBirth=Math.max(0,val("maxBirth",sp.maxBirth ?? 0));
+   if(get("lifespan"))sp.lifespan=Math.max(0.0001,val("lifespan",sp.lifespan ?? 1));
+   if(get("survival"))sp.survival=Math.max(0,val("survival",sp.survival ?? 0));
+   if(get("reproSurplus"))sp.reproSurplus=Math.min(100,Math.max(0,val("reproSurplus",sp.reproSurplus ?? 0)));
+   if(get("edible"))sp.edible=Math.max(0,val("edible",sp.edible ?? 0));
+   if(get("pred"))sp.pred=Math.max(0,val("pred",sp.pred ?? 0));
+   if(get("prey"))sp.prey=String(val("prey",sp.prey ?? ""));
+   if(get("graph"))sp.graph=!!val("graph",sp.graph);
+ });
+}
+function addSpecies(){sync();species.push({name:"New Species",pop:10,startPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:0,reproSurplus:20,edible:1,pred:5,prey:"",graph:true});renderEditors()}
+function delSpecies(i){sync();species.splice(i,1);renderEditors();resetSim(true)}
+
+function renderEditors(full=true){
+ const root=document.getElementById("editors");
+ if(!full && root.children.length===species.length){
+   [...root.children].forEach((el,i)=>{let x=el.querySelector('[data-k="pop"]');if(x)x.value=round(species[i].startPop ?? species[i].pop)}); return;
+ }
+ root.innerHTML="";
+ species.forEach((s,i)=>{
+  let d=document.createElement("div");d.className="species";
+  const producer=s.survival<=0;
+  d.innerHTML=`<div class="grid">
+   ${field("Name","name",s.name,"text")}
+   ${field("Starting population","pop",round(s.startPop ?? s.pop))}
+   ${producer ? `
+     ${field("Carrying capacity","capacity",s.capacity ?? 0)}
+     ${field("Annual regrowth % of capacity","regrowth",s.regrowth ?? 600)}
+     ${field("Edible biomass kg","edible",s.edible)}
+     ${field("Predation rating","pred",s.pred)}
+   ` : `
+     ${field("Births / yr / 2","minBirth",s.minBirth)}
+     ${field("to","maxBirth",s.maxBirth)}
+     ${field("Lifespan (yrs)","lifespan",s.lifespan)}
+     ${field("Survival food kg/yr","survival",s.survival)}
+     ${field("Reproduction surplus %","reproSurplus",s.reproSurplus)}
+     ${field("Edible biomass kg","edible",s.edible)}
+     ${field("Predation rating","pred",s.pred)}
+   `}
+  </div>
+  <div class="row" style="margin-top:8px;align-items:end">
+   ${producer ? "" : `<label style="flex:1"><span>Valid prey (comma-separated names)</span><input data-k="prey" value="${esc(s.prey ?? "")}"></label>`}
+   <label style="width:auto;display:flex;align-items:center;gap:7px;padding:9px 4px;color:#39433d"><input data-k="graph" type="checkbox" ${s.graph!==false?'checked':''} style="width:auto"> Show on graph</label>
+   <button class="danger" onclick="delSpecies(${i})">Delete</button>
+  </div>`;
+  root.appendChild(d);
+  const gc=d.querySelector('[data-k="graph"]'); if(gc) gc.addEventListener("change",()=>{sync();draw();});
+ });
+ refreshAnchor();
+}
+
+function refreshAnchor(){
+ const sel=document.getElementById("anchor"); if(!sel)return;
+ const old=sel.value;
+ sel.innerHTML="";
+ species.forEach((sp,i)=>{
+   if((sp.survival||0)>0){
+     let o=document.createElement("option");o.value=i;o.textContent=sp.name;sel.appendChild(o);
+   }
+ });
+ if([...sel.options].some(o=>o.value===old))sel.value=old;
+ else if(sel.options.length)sel.value=sel.options.length-1;
+}
+
+function autoBalance(){
+ sync();
+ const sel=document.getElementById("anchor"),status=document.getElementById("balanceStatus");
+ if(!sel||sel.value===""){status.textContent="No consumer species is available to use as an anchor.";return;}
+ const anchorIndex=+sel.value;
+ const anchorName=species[anchorIndex]?.name ?? "Anchor";
+ const anchorPop=Math.max(0,parseFloat(document.getElementById("anchorPop").value)||0);
+ if(anchorPop<=0){status.textContent="Anchor population must be greater than zero.";return;}
+
+ // Propagate population requirements as DELTAS through the food web. This matters
+ // when the same prey is required by multiple routes (e.g. Wolf→Rabbit and
+ // Wolf→Fox→Rabbit). Every newly-required rabbit also generates its own grass demand.
+ let required=new Array(species.length).fill(0);
+ required[anchorIndex]=anchorPop;
+ let queue=[{i:anchorIndex,delta:anchorPop,depth:0}], unresolved=[], safety=0;
+
+ while(queue.length && safety++<1000){
+   const {i:pi,delta,depth}=queue.shift(),pred=species[pi];
+   if(delta<=0||pred.survival<=0)continue;
+   if(depth>species.length*3){unresolved.push(pred.name+" (possible food-web cycle)");continue;}
+
+   const preyIndices=(pred.prey||"").split(",").map(x=>x.trim()).filter(Boolean)
+     .map(n=>species.findIndex(s=>s.name===n)).filter(i=>i>=0);
+   if(!preyIndices.length){unresolved.push(pred.name+" (no valid prey)");continue;}
+
+   const r=Math.min(1,Math.max(0,(pred.reproSurplus||0)/100));
+   const reproTendency=1-r;
+   const avgRationCost=reproTendency*(1+r)+(1-reproTendency);
+   const demand=delta*pred.survival*avgRationCost;
+   const weights=preyIndices.map(qi=>{
+     const prey=species[qi],h=hunt(pred.pred,prey.pred);
+     return {qi,h,weight:Math.max(0.000001,prey.edible*h)};
+   });
+   const totalW=weights.reduce((a,x)=>a+x.weight,0);
+
+   weights.forEach(x=>{
+     const prey=species[x.qi];
+     const share=demand*(x.weight/totalW);
+     const physicalKg=share/Math.max(0.000001,x.h);
+     const add=physicalKg/Math.max(0.000001,prey.edible);
+     required[x.qi]+=add;
+     if(prey.survival>0)queue.push({i:x.qi,delta:add,depth:depth+1});
+   });
+ }
+
+ species.forEach((sp,i)=>{
+   if(i===anchorIndex)return;
+   if(required[i]>0){
+     let val=required[i];
+     if(sp.survival<=0){
+       // Standing producer reserve. Monthly regrowth then determines whether this
+       // reserve can actually be maintained under grazing.
+       val*=1.25;
+       if((sp.capacity||0)>0 && sp.capacity<val)sp.capacity=val*1.15;
+     }
+     sp.startPop=Math.ceil(val);sp.pop=sp.startPop;
+   }
+ });
+ species[anchorIndex].startPop=anchorPop;species[anchorIndex].pop=anchorPop;
+ year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
+ renderEditors();renderState();draw();
+
+ let lines=["Calculated from "+anchorName+" = "+fmt(anchorPop)+"."];
+ species.forEach((sp,i)=>{if(required[i]>0||i===anchorIndex)lines.push(sp.name+": "+fmt(sp.startPop)+" starting individuals")});
+ if(unresolved.length)lines.push("⚠ Could not fully resolve: "+[...new Set(unresolved)].join(", "));
+ lines.push("Auto-balance propagates food demand through the full chain; producer regeneration is handled separately during simulation.");
+ status.textContent=lines.join("\n");
+}
+
+function field(label,k,v,type="number"){return `<label><span>${label}</span><input data-k="${k}" type="${type}" ${type==="number"?'step="any"':''} value="${esc(v)}"></label>`}
+function esc(v){return String(v).replaceAll("&","&amp;").replaceAll('"',"&quot;").replaceAll("<","&lt;")}
+function round(x){return Math.round(x*100)/100}
+
+function renderState(){
+ document.getElementById("year").textContent=year;
+ let tb=document.getElementById("state");tb.innerHTML="";
+ species.forEach(s=>{
+  let st=lastStats[s.name]||{};
+  let tr=document.createElement("tr");
+  tr.innerHTML=`<td>${esc(s.name)}</td><td>${fmt(s.pop)}</td><td>${st.foodPct==null?"—":Math.round(st.foodPct)+"%"}</td><td>${fmt(st.reproEligible||0)}</td><td>${fmt(st.births||0)}</td><td>${fmt(st.natural||0)}</td><td>${fmt(st.predation||0)}</td><td>${fmt(st.starve||0)}</td>`;
+  tb.appendChild(tr);
+ });
+}
+function fmt(x){return Math.round(x).toLocaleString()}
+
+function draw(){
+ const c=document.getElementById("chart"),ctx=c.getContext("2d");
+ const dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);
+ ctx.clearRect(0,0,w,h);
+ let pad=35, data=history.slice(-250); if(data.length<2)return;
+ let shown=species.filter(s=>s.graph!==false);
+ if(!shown.length){ctx.fillStyle="#657069";ctx.font="14px system-ui";ctx.fillText("No species selected for graph.",pad,40);return;}
+ let max=1;data.forEach(r=>shown.forEach(s=>max=Math.max(max,r[s.name]||0)));
+ ctx.strokeStyle="#dfe4e0";ctx.lineWidth=1;
+ for(let j=0;j<=4;j++){let y=pad+(h-2*pad)*j/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}
+ const colors=["#2b6f47","#b86b25","#496fb5","#8b4ba5","#c44f57","#4f8d91","#7a6a42","#555"];
+ shown.forEach((s,si)=>{
+  ctx.strokeStyle=colors[si%colors.length];ctx.lineWidth=2;ctx.beginPath();
+  data.forEach((r,j)=>{let x=pad+(w-2*pad)*j/(data.length-1), y=h-pad-(h-2*pad)*(r[s.name]||0)/max;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.stroke();
+ });
+ ctx.font="12px system-ui";shown.forEach((s,i)=>{ctx.fillStyle=colors[i%colors.length];ctx.fillText(s.name,pad+i*75,16)});
+ ctx.fillStyle="#657069";ctx.fillText("0",5,h-pad+4);ctx.fillText(Math.round(max).toLocaleString(),5,pad+4);
+}
+window.addEventListener("resize",draw);
+species=defaults();renderEditors();resetSim(true);refreshAnchor();
+</script>
+</body>
+</html>
