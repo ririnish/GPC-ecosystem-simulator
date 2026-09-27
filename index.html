@@ -33,45 +33,19 @@ th:first-child,td:first-child{text-align:left}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:8px}
 label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px}
 .species{border-top:1px solid #eee;padding-top:12px;margin-top:12px}
-.population-timeline{display:flex;flex-direction:column;gap:14px}.timeline-row{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:start}.timeline-label{font-weight:650;font-size:.9rem;padding-top:3px}.timeline-track{display:flex;height:30px;border:1px solid #d8ddd9;border-radius:8px;overflow:hidden;background:#f3f5f3}.timeline-segment{min-width:2px;position:relative}.timeline-segment:hover{outline:2px solid #17201b;outline-offset:-2px;z-index:2}.timeline-transitions{font-size:.72rem;color:#68736c;margin-top:4px;line-height:1.45}.rating-legend{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.rating-key{display:flex;align-items:center;gap:5px;font-size:.76rem}.rating-swatch{width:13px;height:13px;border-radius:3px;border:1px solid #0002}.rating-extinct{background:#303633}.rating-scarce{background:#d99537}.rating-stable{background:#5b9b68}.rating-abundant{background:#4f83b8}.rating-overpopulated{background:#9b5ba5}@media(max-width:600px){.timeline-row{grid-template-columns:82px 1fr}.timeline-label{font-size:.78rem}}
+.population-timeline{display:flex;flex-direction:column;gap:14px}.timeline-row{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:start}.timeline-label{font-weight:650;font-size:.9rem;padding-top:3px}.timeline-track{display:flex;height:30px;border:1px solid #d8ddd9;border-radius:8px;overflow:hidden;background:#f3f5f3}.timeline-segment{min-width:2px;position:relative}.timeline-segment:hover{outline:2px solid #17201b;outline-offset:-2px;z-index:2}.timeline-transitions{font-size:.72rem;color:#68736c;margin-top:4px;line-height:1.45}.rating-legend{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.rating-key{display:flex;align-items:center;gap:5px;font-size:.76rem}.rating-swatch{width:13px;height:13px;border-radius:3px;border:1px solid #0002}.rating-extinct{background:#303633}.rating-critical{background:#c43d3d}.rating-scarce{background:#d99537}.rating-stable{background:#5b9b68}.rating-abundant{background:#4f83b8}.rating-overpopulated{background:#9b5ba5}
+.health-extinct td{color:#303633}.health-critical td{color:#c43d3d}.health-scarce td{color:#d99537}.health-stable td{color:#5b9b68}.health-abundant td{color:#4f83b8}.health-overpopulated td{color:#9b5ba5}
+@media(max-width:600px){.timeline-row{grid-template-columns:82px 1fr}.timeline-label{font-size:.78rem}}
 .note{font-size:.8rem;color:#68736c}.balance-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end}.status{margin-top:10px;padding:10px;border-radius:9px;background:#f5f7f5;font-size:.86rem;white-space:pre-line}@media(max-width:600px){.balance-grid{grid-template-columns:1fr 1fr}.balance-grid button{grid-column:1/-1}}
 @media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}table{font-size:.78rem}th,td{padding:6px 3px}.hide-mobile{display:none}}
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.37</h1>
+<h1>GPC Ecosystem Simulator — v0.38</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
-<div class="card">
- <div class="row">
-  <button class="primary" onclick="run(1)">Run 1 year</button>
-  <button onclick="run(10)">Run 10</button>
-  <button onclick="run(100)">Run 100</button>
-  <button onclick="run(500)">Run 500</button>
-  <button onclick="exportSimulation()">Export simulation</button>
-  <button onclick="resetSim()">Reset</button>
- </div>
- <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.88rem"><input id="includeInvasives" type="checkbox" style="width:auto" checked onchange="toggleInvasiveSimulation()"> Include invasive species in simulation</label>
- <div class="graph-controls" style="margin-top:10px"><label><span>Resume from year</span><input id="resumeYear" type="number" min="0" step="1" value="0"></label><button type="button" onclick="resumeFromYear()">Resume from year</button></div>
- <p class="note">Resume restores the stored end-of-year simulation state, truncates later history/diagnostics, and starts a new branch. Authored Starting Population values are not changed.</p>
- <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. The run-controls checkbox can include or exclude all invasive species from simulation; turning it on explicitly introduces them at their authored Starting Population at the current year, while turning it off removes them from active simulation. Native Expected Population is estimated from the mature pre-invasion ecosystem. After calibration, Year 0 continues from the exact final state of the mature native burn-in rather than reconstructing a fresh ecosystem from averaged populations; the entire native state is rescaled proportionally so the anchor Expected Population matches the authored anchor. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For prey below its frozen Auto-Balance Encounter Baseline, encounterability declines in proportion to current/baseline abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
-</div>
-
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Calibrate healthy ecosystem</h2><button class="collapse-btn" type="button">−</button></div>
- <div class="section-body">
- <p class="note">Pick one native consumer as the anchor. Auto-balance creates a native-only seed, then hidden pre-simulation estimates the mature healthy baseline. The Auto-Balance result is frozen as the Encounter Baseline used by prey encounterability. A single native-only burn-in then observes the mature healthy population without feeding that observation back into simulation physics. Expected Population is the mature long-term mean, and Year 0 continues from the exact final burn-in state. Invasive species keep their authored introduction population.</p>
- <div class="balance-grid">
-  <label><span>Anchor species</span><select id="anchor"></select></label>
-  <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="10"></label>
-  <button class="primary" onclick="autoBalance()">Calibrate ecosystem</button>
- </div>
- <div id="balanceStatus" class="status">Choose a native anchor and calibrate the pre-invasion ecosystem.</div>
- </div>
-</div>
-
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Species</h2><button class="collapse-btn" type="button">−</button></div>
+<div class="card" id="speciesCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Species</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
  <div id="editors"></div>
  <div class="row" style="margin-top:12px;align-items:end">
@@ -83,8 +57,73 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  </div>
 </div>
 
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Analysis range</h2><button class="collapse-btn" type="button">−</button></div>
+<div class="card" id="calibrateCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Calibrate</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
+ <div class="section-body">
+ <p class="note">Pick one native consumer as the anchor. Auto-balance creates a native-only seed, then hidden pre-simulation estimates the mature healthy baseline. The Auto-Balance result is frozen as the Encounter Baseline used by prey encounterability. A single native-only burn-in then observes the mature healthy population without feeding that observation back into simulation physics. Expected Population is the mature long-term mean, and Year 0 continues from the exact final burn-in state. Invasive species keep their authored introduction population.</p>
+ <div class="balance-grid">
+  <label><span>Anchor species</span><select id="anchor"></select></label>
+  <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="10"></label>
+  <button class="primary" onclick="autoBalance()">Calibrate ecosystem</button>
+ </div>
+ <div id="balanceStatus" class="status">Choose a native anchor and calibrate the pre-invasion ecosystem.</div>
+ </div>
+</div>
+
+<div class="card" id="runCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Run</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
+ <div class="section-body">
+ <div class="row">
+  <button class="primary" onclick="run(1)">Run 1 year</button>
+  <button onclick="run(10)">Run 10</button>
+  <button onclick="run(100)">Run 100</button>
+  <button onclick="run(500)">Run 500</button>
+  <button onclick="exportSimulation()">Export simulation</button>
+  <button onclick="document.getElementById('importSimulationFile').click()">Import simulation</button>
+  <input id="importSimulationFile" type="file" accept=".json,application/json" style="display:none" onchange="importSimulationFile(this)">
+  <button onclick="resetSim()">Reset</button>
+ </div>
+ <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.88rem"><input id="includeInvasives" type="checkbox" style="width:auto" checked onchange="toggleInvasiveSimulation()"> Include invasive species in simulation</label>
+ <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. The run-controls checkbox can include or exclude all invasive species from simulation; turning it on explicitly introduces them at their authored Starting Population at the current year, while turning it off removes them from active simulation. Native Expected Population is estimated from the mature pre-invasion ecosystem. After calibration, Year 0 continues from the exact final state of the mature native burn-in rather than reconstructing a fresh ecosystem from averaged populations; the entire native state is rescaled proportionally so the anchor Expected Population matches the authored anchor. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For prey below its frozen Auto-Balance Encounter Baseline, encounterability declines in proportion to current/baseline abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
+ </div>
+</div>
+
+<div class="card" id="historyCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
+ <div class="section-body">
+ <p class="note">Each species gets a categorical population timeline relative to Expected Population. Native species use the calibrated pre-invasion baseline; invasive species use their authored introduction population as a display reference. Extinct = 0; Critical = above 0 but below 20%; Scarce = 20–50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p>
+ <div class="rating-legend"><span class="rating-key"><i class="rating-swatch rating-extinct"></i>Extinct</span><span class="rating-key"><i class="rating-swatch rating-critical"></i>Critical</span><span class="rating-key"><i class="rating-swatch rating-scarce"></i>Scarce</span><span class="rating-key"><i class="rating-swatch rating-stable"></i>Stable</span><span class="rating-key"><i class="rating-swatch rating-abundant"></i>Abundant</span><span class="rating-key"><i class="rating-swatch rating-overpopulated"></i>Overpopulated</span></div>
+ <div id="populationTimeline" class="population-timeline"></div>
+ <div class="graph-controls" style="margin-top:12px">
+  <label><span>Average population — start in year</span><input id="averageStartYear" type="number" min="0" step="1" value="25" oninput="renderPopulationAverages()"></label>
+ </div>
+ <div id="populationAverages"></div>
+ <p class="note">Average Population uses annual population snapshots from the selected start year through the latest simulated year, letting you exclude the initial transient spike. The status timeline includes all species; the average includes all species.</p>
+ </div>
+</div>
+
+<div class="card" id="currentCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Current state</h2><div class="row"><strong>Year <span id="year">0</span></strong><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div></div>
+ <div class="section-body">
+ <p class="note">Shows the state at the end of the selected Analysis Range. Annual flow values come from that selected year.</p>
+ <div style="overflow:auto"><table><thead><tr><th>Species</th><th>Population</th><th>Food %</th><th>Avg repro eligible</th><th>Births</th><th>Natural deaths</th><th>Predation deaths</th><th>Starvation deaths</th></tr></thead><tbody id="state"></tbody></table></div>
+ </div>
+</div>
+
+<div class="card" id="visualizationCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Visualization output</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
+ <div class="section-body">
+  <div class="graph-controls">
+   <label><span>Illustrate year</span><input id="illustrateYear" type="number" min="0" step="1" value="0" oninput="renderVisualizationOutput()"></label>
+   <button type="button" onclick="setIllustrateLatest()">Latest year</button>
+  </div>
+  <p class="note">Turns simulation state into an illustration brief. Population uses Expected Population. Body condition uses food sufficiency. Babies, carcasses (natural + starvation deaths), and remains (predation deaths) are compared as per-capita annual rates against the native healthy calibration distribution. “Normal” is the middle 80% of healthy calibration years (10th–90th percentile), so the ecosystem defines its own normal variation. Invasive species have no pre-invasion healthy baseline, so rate-based outputs show —.</p>
+  <div id="visualizationOutput" style="overflow:auto"></div>
+ </div>
+</div>
+
+<div class="card" id="analysisCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Analysis range</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
   <div class="graph-controls">
    <label><span>From year</span><input id="graphFrom" type="number" min="0" step="1" placeholder="Set range" oninput="analysisRangeChanged()"></label>
@@ -96,34 +135,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  </div>
 </div>
 
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button">−</button></div>
- <div class="section-body">
- <p class="note">Each species gets a categorical population timeline relative to Expected Population. Native species use the calibrated pre-invasion baseline; invasive species use their authored introduction population as a display reference. Extinct = 0; Scarce = below 50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p>
- <div class="rating-legend"><span class="rating-key"><i class="rating-swatch rating-extinct"></i>Extinct</span><span class="rating-key"><i class="rating-swatch rating-scarce"></i>Scarce</span><span class="rating-key"><i class="rating-swatch rating-stable"></i>Stable</span><span class="rating-key"><i class="rating-swatch rating-abundant"></i>Abundant</span><span class="rating-key"><i class="rating-swatch rating-overpopulated"></i>Overpopulated</span></div>
- <div id="populationTimeline" class="population-timeline"></div>
- <div class="graph-controls" style="margin-top:12px">
-  <label><span>Average population — start in year</span><input id="averageStartYear" type="number" min="0" step="1" value="25" oninput="renderPopulationAverages()"></label>
- </div>
- <div id="populationAverages"></div>
- <p class="note">Average Population uses annual population snapshots from the selected start year through the latest simulated year, letting you exclude the initial transient spike. The status timeline includes all species; the average includes all species.</p>
- </div>
-</div>
-
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Visualization output</h2><button class="collapse-btn" type="button">−</button></div>
- <div class="section-body">
-  <div class="graph-controls">
-   <label><span>Illustrate year</span><input id="illustrateYear" type="number" min="0" step="1" value="0" oninput="renderVisualizationOutput()"></label>
-   <button type="button" onclick="setIllustrateLatest()">Latest year</button>
-  </div>
-  <p class="note">Turns simulation state into an illustration brief. Population uses Expected Population. Body condition uses food sufficiency. Babies, carcasses (natural + starvation deaths), and remains (predation deaths) are compared as per-capita annual rates against the native healthy calibration distribution. “Normal” is the middle 80% of healthy calibration years (10th–90th percentile), so the ecosystem defines its own normal variation. Invasive species use fallback thresholds learned from pooled native per-capita event rates, so rate-based outputs remain available without contaminating native calibration.</p>
-  <div id="visualizationOutput" style="overflow:auto"></div>
- </div>
-</div>
-
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
+<div class="card" id="yearlyCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Yearly diagnostics</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="yearlySpeciesFilter" class="filter-chips"></div></div>
  <p class="note">One row per species per year. Set an explicit Analysis Range before this table loads. Flows such as births and deaths are annual totals; survival-only and reproduction-eligible are monthly averages; population is the end-of-year active population.</p>
@@ -131,8 +144,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  </div>
 </div>
 
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button">−</button></div>
+<div class="card" id="monthlyCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Monthly diagnostics</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div></div>
  <p class="note">Trace each monthly step to find the first value that goes off the rails. Set an explicit Analysis Range before this table loads.</p>
@@ -140,18 +153,10 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  </div>
 </div>
 
-<div class="card">
- <div class="section-head" onclick="toggleSection(this)"><h2>Current state</h2><div class="row"><strong>Year <span id="year">0</span></strong><button class="collapse-btn" type="button">−</button></div></div>
- <div class="section-body">
- <p class="note">Shows the state at the end of the selected Analysis Range. Annual flow values come from that selected year.</p>
- <div style="overflow:auto"><table><thead><tr><th>Species</th><th>Population</th><th>Food %</th><th>Avg repro eligible</th><th>Births</th><th>Natural deaths</th><th>Predation deaths</th><th>Starvation deaths</th></tr></thead><tbody id="state"></tbody></table></div>
- </div>
-</div>
-
 <script>
 let diagnosticRows=[];
 
-let species=[], year=0, history=[], lastStats={}, simulationSnapshots=[], globalVizFallback=null;
+let species=[], year=0, history=[], lastStats={};
 
 function defaults(){
  return [
@@ -175,38 +180,10 @@ function resetSim(keep=false){
    if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop;
    s.pop=s.startPop;
  });
- year=0; history=[snapshot()]; lastStats={}; simulationSnapshots=[simulationStateSnapshot()];
+ year=0; history=[snapshot()]; lastStats={};
  renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics();
 }
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
-function simulationStateSnapshot(){
- ensureSpeciesIds();
- return {year,invasivesEnabled:invasivesEnabled(),species:species.map(sp=>({id:sp.id,pop:Math.max(0,sp.pop||0),eradicated:!!sp.eradicated}))};
-}
-function storeSimulationSnapshot(){
- const snap=simulationStateSnapshot(),idx=simulationSnapshots.findIndex(x=>x.year===year);
- if(idx>=0)simulationSnapshots[idx]=snap;else simulationSnapshots.push(snap);
- simulationSnapshots.sort((a,b)=>a.year-b.year);
-}
-function resumeFromYear(){
- sync();ensureSpeciesIds();
- const el=document.getElementById("resumeYear");
- const target=Math.max(0,Math.min(year,parseInt(el?.value,10)||0));
- const saved=simulationSnapshots.find(x=>x.year===target);
- if(!saved){alert("No resumable snapshot exists for Year "+target+".");return;}
- year=target;
- const byId=new Map(saved.species.map(x=>[x.id,x]));
- species.forEach(sp=>{const st=byId.get(sp.id);if(st){sp.pop=Math.max(0,Number(st.pop)||0);sp.eradicated=!!st.eradicated;}});
- const inv=document.getElementById("includeInvasives");if(inv)inv.checked=!!saved.invasivesEnabled;
- history=history.filter(h=>h.year<=target);
- diagnosticRows=diagnosticRows.filter(r=>r.year<=target);
- simulationSnapshots=simulationSnapshots.filter(x=>x.year<=target);
- if(history.length)history[history.length-1]=snapshot();else history=[snapshot()];
- storeSimulationSnapshot();lastStats={};
- document.getElementById("graphFrom").value="";document.getElementById("graphTo").value="";
- const iy=document.getElementById("illustrateYear");if(iy)iy.value=target;
- renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
-}
 function rnd(a,b){return a+Math.random()*(b-a)}
 function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
 
@@ -219,15 +196,14 @@ function step(syncFromUI=true){
  // be hunted, and die beginning the next month instead of materializing in one
  // year-end pulse. The breeding pool is frozen at the start of the year so those
  // newborns do not increase reproductive eligibility until the following year.
- const annualBreedingPool=species.map(sp=>(sp.eradicated||(sp.invasive&&!invasivesEnabled()))?0:Math.max(0,sp.pop));
+ const annualBreedingPool=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:Math.max(0,sp.pop));
  for(let month=0;month<12;month++)stepMonth(annualBreedingPool,month+1);
  year++;
  history.push(snapshot());
- storeSimulationSnapshot();
 }
 
 function stepMonth(annualBreedingPool,monthNo){
- const dt=1/12,start=species.map(sp=>(sp.eradicated||(sp.invasive&&!invasivesEnabled()))?0:Math.max(0,sp.pop));
+ const dt=1/12,start=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:Math.max(0,sp.pop));
  const obtained=new Array(species.length).fill(0),preyLossKg=new Array(species.length).fill(0);
  ensureSpeciesIds();
  const monthDiag=species.map((sp,i)=>({year:year+1,month:monthNo,speciesId:sp.id,species:sp.name,start:start[i],predDeaths:0,postPred:0,foodRequired:0,foodObtained:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,end:0}));
@@ -347,7 +323,7 @@ function stepMonth(annualBreedingPool,monthNo){
  // PHASE D/E: natural mortality, starvation/reproductive eligibility, births/regrowth.
  species.forEach((sp,i)=>{
    lastStats[i]??={births:0,natural:0,predation:0,starve:0,food:0,eligible:0};
-   if(sp.eradicated||(sp.invasive&&!invasivesEnabled())){sp.pop=0;monthDiag[i].end=0;return;}
+   if(sp.invasive&&!invasivesEnabled()){sp.pop=0;monthDiag[i].end=0;return;}
    const base=afterFeeding[i];
    const natural=sp.lifespan>0?Math.min(base,base/sp.lifespan*dt):0;
    let alive=Math.max(0,base-natural);lastStats[i].natural+=natural;monthDiag[i].naturalDeaths=natural;
@@ -421,9 +397,10 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.37",
+   version:"v0.38",
    exportedAt,
    simulatedThroughYear:year,
+   includeInvasives:invasivesEnabled(),
    species:species.map(s=>({
      id:s.id,name:s.name,type:s.type ?? (s.survival<=0?"producer":"consumer"),
      startingPopulation:s.startPop,expectedPopulation:s.expectedPop,
@@ -431,11 +408,9 @@ function exportSimulation(){
      birthsPerYearPer2:[s.minBirth??null,s.maxBirth??null],lifespanYears:s.lifespan??null,
      survivalFoodKgPerYear:s.survival,reproductionSurplusPercent:s.reproSurplus??null,
      edibleBiomassKg:s.edible,predationRating:s.pred,validPrey:s.prey||"",
-     currentPopulation:s.pop,isInvasive:!!s.invasive,isEradicated:!!s.eradicated,healthyVisualizationBaseline:s.healthyViz||null
+     currentPopulation:s.pop,isInvasive:!!s.invasive,encounterBaseline:s.encounterBaseline??null,graphEnabled:s.graph!==false,healthyVisualizationBaseline:s.healthyViz||null
    })),
    populationHistory:history,
-   resumableSnapshots:simulationSnapshots,
-   invasiveVisualizationFallback:globalVizFallback,
    yearlyDiagnostics:yearly,
    monthlyDiagnostics:diagnosticRows
  };
@@ -446,6 +421,51 @@ function exportSimulation(){
  a.download=`gpc_simulation_year_${year}_${exportedAt.slice(0,10)}.json`;
  document.body.appendChild(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function importSimulationFile(input){
+ const file=input.files&&input.files[0]; if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{importSimulation(JSON.parse(reader.result));}
+  catch(err){alert("Could not import simulation JSON: "+err.message);}
+  finally{input.value="";}
+ };
+ reader.readAsText(file);
+}
+function importSimulation(data){
+ if(!data||data.format!=="GPC Ecosystem Simulator Export"||!Array.isArray(data.species)||!Array.isArray(data.populationHistory))throw new Error("This does not look like a GPC Ecosystem Simulator export.");
+ let legacyMissingEncounter=false;
+ species=data.species.map(x=>{
+  if(x.encounterBaseline==null)legacyMissingEncounter=true;
+  return {id:x.id||newSpeciesId(),name:x.name||"Species",type:x.type,
+   pop:Math.max(0,Number(x.currentPopulation)||0),startPop:Math.max(0,Number(x.startingPopulation)||0),expectedPop:Math.max(0,Number(x.expectedPopulation)||0),
+   capacity:Math.max(0,Number(x.carryingCapacity)||0),regrowth:Number(x.annualRegrowthPercent)||0,
+   minBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[0]:null,maxBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[1]:null,
+   lifespan:x.lifespanYears,survival:Number(x.survivalFoodKgPerYear)||0,reproSurplus:Number(x.reproductionSurplusPercent)||0,
+   edible:Number(x.edibleBiomassKg)||0,pred:Number(x.predationRating)||0,prey:x.validPrey||"",invasive:!!x.isInvasive,
+   encounterBaseline:x.encounterBaseline==null?Math.max(0,Number(x.startingPopulation)||0):Math.max(0,Number(x.encounterBaseline)||0),
+   graph:x.graphEnabled!==false,healthyViz:x.healthyVisualizationBaseline||null};
+ });
+ ensureSpeciesIds();
+ year=Math.max(0,parseInt(data.simulatedThroughYear,10)||0);
+ history=data.populationHistory.map(r=>({...r,year:Number(r.year)||0}));
+ diagnosticRows=Array.isArray(data.monthlyDiagnostics)?data.monthlyDiagnostics.map(r=>({...r})):[];
+ const latest=history.find(r=>r.year===year)||history[history.length-1];
+ if(latest)species.forEach(sp=>{if(Number.isFinite(Number(latest[sp.name])))sp.pop=Math.max(0,Number(latest[sp.name]));});
+ const inv=document.getElementById("includeInvasives"); if(inv&&typeof data.includeInvasives==="boolean")inv.checked=data.includeInvasives;
+ renderEditors();refreshAnchor();refreshGraphSpeciesFilter();refreshDiagnosticSpeciesFilters();
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
+ const status=document.getElementById("balanceStatus");
+ if(status)status.textContent=legacyMissingEncounter
+   ?`Imported ${data.version||"legacy"} session through Year ${year}. This older export did not store Encounter Baselines, so its history is preserved for analysis, but recalibrate before continuing the simulation if you need identical ecology physics.`
+   :`Imported ${data.version||"GPC"} session through Year ${year}. History, diagnostics, calibrated baselines, and current populations restored.`;
+}
+function reorderSections(){
+ const order=["speciesCard","calibrateCard","runCard","historyCard","currentCard","visualizationCard","analysisCard","yearlyCard","monthlyCard"];
+ const first=document.getElementById(order[0]); if(!first)return;
+ const parent=first.parentNode;
+ order.forEach(id=>{const el=document.getElementById(id);if(el)parent.appendChild(el);});
 }
 
 function toggleSection(head){
@@ -525,7 +545,7 @@ function renderDiagnostics(){
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate a monthly trace.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
  let h='<table><thead><tr><th>Yr</th><th>Mo</th><th>Species</th><th>Start</th><th>Pred deaths</th><th>Post-pred</th><th>Food req kg</th><th>Food got kg</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Survive only</th><th>Repro eligible</th><th>Births</th><th>Regrowth</th><th>End active</th></tr></thead><tbody>';
- rows.forEach(r=>h+=`<tr><td>${r.year}</td><td>${r.month}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.predDeaths)}</td><td>${f(r.postPred)}</td><td>${f(r.foodRequired)}</td><td>${f(r.foodObtained)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td><td>${f(r.end)}</td></tr>`);
+ rows.forEach(r=>{const sp=species.find(s=>(s.id||s.name)===(r.speciesId||r.species));const health=sp?populationRating(sp,Number(r.end)||0):"stable";h+=`<tr class="health-${health}"><td>${r.year}</td><td>${r.month}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.predDeaths)}</td><td>${f(r.postPred)}</td><td>${f(r.foodRequired)}</td><td>${f(r.foodObtained)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td><td>${f(r.end)}</td></tr>`});
  d.innerHTML=h+'</tbody></table>';
 }
 function renderYearlyDiagnostics(){
@@ -536,7 +556,7 @@ function renderYearlyDiagnostics(){
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate yearly diagnostics.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
  let h='<table><thead><tr><th>Yr</th><th>Species</th><th>Start</th><th>End</th><th>Food %</th><th>Pred deaths</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Avg survive only</th><th>Avg repro eligible</th><th>Births</th><th>Regrowth</th></tr></thead><tbody>';
- rows.forEach(r=>h+=`<tr><td>${r.year}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.end)}</td><td>${r.foodPct==null?'—':Math.round(r.foodPct)+'%'}</td><td>${f(r.predDeaths)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td></tr>`);
+ rows.forEach(r=>{const sp=species.find(s=>(s.id||s.name)===(r.speciesId||r.species));const health=sp?populationRating(sp,Number(r.end)||0):"stable";h+=`<tr class="health-${health}"><td>${r.year}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.end)}</td><td>${r.foodPct==null?'—':Math.round(r.foodPct)+'%'}</td><td>${f(r.predDeaths)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td></tr>`});
  d.innerHTML=h+'</tbody></table>';
 }
 function analysisRangeChanged(){draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();renderState();}
@@ -545,12 +565,11 @@ function invasivesEnabled(){const el=document.getElementById("includeInvasives")
 function toggleInvasiveSimulation(){
  sync();
  const enabled=invasivesEnabled();
- species.forEach(sp=>{if(sp.invasive)sp.pop=(enabled&&!sp.eradicated)?Math.max(0,sp.startPop):0});
+ species.forEach(sp=>{if(sp.invasive)sp.pop=enabled?Math.max(0,sp.startPop):0});
  // Treat the toggle as an explicit introduction/removal event at the current year.
  // Replace the current-year snapshot so graphs/state immediately reflect the choice.
  if(history.length)history[history.length-1]=snapshot();
- storeSimulationSnapshot();
- renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();
 }
 function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics()}
 
@@ -583,11 +602,10 @@ function sync(){
    if(get("pred"))sp.pred=Math.max(0,val("pred",sp.pred ?? 0));
    if(get("prey"))sp.prey=String(val("prey",sp.prey ?? ""));
     if(get("invasive"))sp.invasive=!!val("invasive",sp.invasive);
-   if(get("eradicated"))sp.eradicated=!!val("eradicated",sp.eradicated);
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
 }
-function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false,eradicated:false});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false});renderEditors();refreshDiagnosticSpeciesFilters()}
 function refreshCopySpeciesSelect(){
  const sel=document.getElementById("copySpeciesSelect");if(!sel)return;
  ensureSpeciesIds();
@@ -618,16 +636,10 @@ function copySpecies(){
    pred:source.pred ?? 5,
    prey:source.prey ?? "",
    graph:source.graph!==false,
-    invasive:!!source.invasive,
-    eradicated:false
+    invasive:!!source.invasive
  };
  species.push(copy);
  renderEditors();refreshDiagnosticSpeciesFilters();
-}
-function toggleSpeciesEradication(i,checked){
- sync();const sp=species[i];if(!sp)return;sp.eradicated=!!checked;if(sp.eradicated)sp.pop=0;
- if(history.length)history[history.length-1]=snapshot();storeSimulationSnapshot();
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();
 }
 function delSpecies(i){sync();species.splice(i,1);renderEditors();refreshDiagnosticSpeciesFilters();resetSim(true)}
 
@@ -646,7 +658,6 @@ function renderEditors(full=true){
    ${field("Starting population","pop",round(s.startPop ?? s.pop))}
    <label><span>Species type</span><select data-k="type"><option value="consumer" ${producer?"":"selected"}>Consumer</option><option value="producer" ${producer?"selected":""}>Producer</option></select></label>
    <label><span>Invasive species</span><span style="display:flex;align-items:center;gap:8px;min-height:38px"><input data-k="invasive" type="checkbox" style="width:auto" ${s.invasive?"checked":""}> Is invasive</span></label>
-   <label><span>Eradication</span><span style="display:flex;align-items:center;gap:8px;min-height:38px"><input data-k="eradicated" type="checkbox" style="width:auto" ${s.eradicated?"checked":""} onchange="toggleSpeciesEradication(${i},this.checked)"> Eradicate</span></label>
    ${producer ? `
      ${field("Carrying capacity","capacity",s.capacity ?? 0)}
      ${field("Annual regrowth % of capacity","regrowth",s.regrowth ?? 600)}
@@ -770,8 +781,8 @@ function autoBalance(){
 
  // Run exactly one native-only burn-in from the old Auto-Balance seed using normal
  // gameplay rules, including the physical <1 consumer extinction floor.
- species.forEach((sp,i)=>{sp.eradicated=false;sp.pop=sp.invasive?0:nativeSeed[i];});
- year=0;history=[snapshot()];diagnosticRows=[];lastStats={};simulationSnapshots=[simulationStateSnapshot()];
+ species.forEach((sp,i)=>{sp.pop=sp.invasive?0:nativeSeed[i];});
+ year=0;history=[snapshot()];diagnosticRows=[];lastStats={};
  for(let y=0;y<BURN_IN_YEARS;y++)step(false);
 
  const tail=history.filter(h=>h.year>=TAIL_START);
@@ -789,19 +800,17 @@ function autoBalance(){
 
  // Healthy visualization baselines come from the same mature native burn-in.
  const calibrationYearly=yearlyRows().filter(r=>r.year>=TAIL_START);
- const q=(arr,p)=>{if(!arr.length)return null;const a=[...arr].sort((x,y)=>x-y),x=(a.length-1)*p,lo=Math.floor(x),hi=Math.ceil(x);return lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(x-lo)};
- const pack=arr=>({p10:q(arr,.10),median:q(arr,.50),p90:q(arr,.90)});
- const pooled={births:[],carcasses:[],remains:[]};
  species.forEach(sp=>{
    if(sp.invasive){sp.healthyViz=null;return;}
    const rows=calibrationYearly.filter(r=>(r.speciesId||r.species)===(sp.id||sp.name));
-   const perCap=(keyFn)=>rows.map(r=>{const avgPop=Math.max(0,(Number(r.start||0)+Number(r.end||0))/2);return avgPop>0?keyFn(r)/avgPop:null;}).filter(Number.isFinite);
-   const births=perCap(r=>r.births||0),carcasses=perCap(r=>(r.naturalDeaths||0)+(r.starvation||0)),remains=perCap(r=>r.predDeaths||0);
-   sp.healthyViz={births:pack(births),carcasses:pack(carcasses),remains:pack(remains)};
-   pooled.births.push(...births);pooled.carcasses.push(...carcasses);pooled.remains.push(...remains);
+   const perCap=(keyFn)=>rows.map(r=>{
+     const avgPop=Math.max(0,(Number(r.start||0)+Number(r.end||0))/2);
+     return avgPop>0?keyFn(r)/avgPop:null;
+   }).filter(Number.isFinite);
+   const q=(arr,p)=>{if(!arr.length)return null;const a=[...arr].sort((x,y)=>x-y),x=(a.length-1)*p,lo=Math.floor(x),hi=Math.ceil(x);return lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(x-lo)};
+   const pack=arr=>({p10:q(arr,.10),median:q(arr,.50),p90:q(arr,.90)});
+   sp.healthyViz={births:pack(perCap(r=>r.births||0)),carcasses:pack(perCap(r=>(r.naturalDeaths||0)+(r.starvation||0))),remains:pack(perCap(r=>r.predDeaths||0))};
  });
- globalVizFallback={births:pack(pooled.births),carcasses:pack(pooled.carcasses),remains:pack(pooled.remains)};
-
  renderDiagnostics=oldRD;renderYearlyDiagnostics=oldRY;
 
  // The exact end of the same burn-in becomes visible Year 0. No rescaling, no second
@@ -815,7 +824,7 @@ function autoBalance(){
    }
  });
 
- year=0;lastStats={};diagnosticRows=[];history=[snapshot()];simulationSnapshots=[simulationStateSnapshot()];
+ year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
  renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
 
  const extinctNatives=species.filter(sp=>!sp.invasive && sp.survival>0 && !(sp.startPop>0)).map(sp=>sp.name);
@@ -867,7 +876,7 @@ function showSingleYear(){
 function populationRatingFor(sp,pop){
  const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
  if(pop<=0)return "Extinct"; if(expected<=0)return "Stable";
- const ratio=pop/expected; if(ratio<.5)return "Scarce"; if(ratio<1.5)return "Stable"; if(ratio<2.5)return "Abundant"; return "Overpopulated";
+ const ratio=pop/expected; if(ratio<.2)return "Critical"; if(ratio<.5)return "Scarce"; if(ratio<1.5)return "Stable"; if(ratio<2.5)return "Abundant"; return "Overpopulated";
 }
 function bodyConditionFor(sp,row){
  if((sp.survival||0)<=0)return "—";
@@ -897,7 +906,7 @@ function renderVisualizationOutput(){
    const pop=Math.max(0,Number(snap[sp.name]||0));
    const row=annual.get(sp.id||sp.name);
    const avgPop=row?Math.max(0,(Number(row.start||0)+Number(row.end||0))/2):pop;
-   const baseline=sp.healthyViz||globalVizFallback;
+   const baseline=sp.healthyViz;
    const babies=row?rateCategory(row.births||0,avgPop,baseline?.births):"—";
    const carcasses=row?rateCategory((row.naturalDeaths||0)+(row.starvation||0),avgPop,baseline?.carcasses):"—";
    const remains=row?rateCategory(row.predDeaths||0,avgPop,baseline?.remains):"—";
@@ -932,12 +941,13 @@ function populationRating(sp,pop){
  const expected=Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
  if(expected<=0)return "stable";
  const ratio=pop/expected;
+ if(ratio<0.2)return "critical";
  if(ratio<0.5)return "scarce";
  if(ratio<1.5)return "stable";
  if(ratio<2.5)return "abundant";
  return "overpopulated";
 }
-function ratingLabel(r){return ({extinct:"Extinct",scarce:"Scarce",stable:"Stable",abundant:"Abundant",overpopulated:"Overpopulated"})[r]||r}
+function ratingLabel(r){return ({extinct:"Extinct",critical:"Critical",scarce:"Scarce",stable:"Stable",abundant:"Abundant",overpopulated:"Overpopulated"})[r]||r}
 function draw(){
  const out=document.getElementById("populationTimeline");if(!out)return;
  const {from,to}=getAnalysisRange();
@@ -970,7 +980,7 @@ function draw(){
    wrap.append(track,transitions);row.append(label,wrap);out.appendChild(row);
  });
 }
-species=defaults();species.forEach(sp=>sp.eradicated=false);renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
+reorderSections();species=defaults();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
 </html>
