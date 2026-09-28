@@ -39,10 +39,14 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 .note{font-size:.8rem;color:#68736c}.balance-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end}.status{margin-top:10px;padding:10px;border-radius:9px;background:#f5f7f5;font-size:.86rem;white-space:pre-line}@media(max-width:600px){.balance-grid{grid-template-columns:1fr 1fr}.balance-grid button{grid-column:1/-1}}
 @media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}table{font-size:.78rem}th,td{padding:6px 3px}.hide-mobile{display:none}}
 .intervention-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px}.intervention-box{border:1px solid #e0e4e1;border-radius:11px;padding:11px;background:#fafbf9}.intervention-box h3{font-size:.92rem;margin:0 0 8px}.intervention-controls{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.intervention-controls.three{grid-template-columns:1fr 110px auto}.warning{font-size:.78rem;color:#b3261e;margin:7px 0 0}.hidden{display:none!important}button:disabled{cursor:not-allowed;color:#8c948f;background:#ecefed;border-color:#d7dcd8}.storage-wrap{margin-bottom:14px}.storage-slots{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.storage-slot{min-height:76px;border:1px solid #cbd2cd;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px;text-align:center;background:#fbfcfb}.storage-slot.empty{color:#a7aea9;background:#f6f7f6}.storage-animals{font-size:1.35rem;line-height:1.25;white-space:nowrap}.storage-progress{font-size:.75rem;margin-top:5px;color:#68736c}.storage-progress.preserved{color:#2f7d45;font-weight:700}.storage-summary{font-size:.76rem;color:#68736c;margin-top:6px;text-align:right}@media(max-width:700px){.intervention-grid{grid-template-columns:1fr}.storage-slots{gap:4px}.storage-slot{min-height:70px;padding:5px}.storage-animals{font-size:1.1rem}.storage-progress{font-size:.68rem}.intervention-controls.three{grid-template-columns:1fr 90px auto}}
+
+/* v0.54 UI pass */
+.theme-toggle{margin-left:auto}.run-custom{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:10px}.run-custom label{width:130px}.branch-controls{margin-top:12px;padding-top:12px;border-top:1px solid #e0e4e1}.current-year-banner{font-weight:750;font-size:.95rem;margin:10px 0 6px}.timeline-pop{display:block;font-weight:500;font-size:.72rem;color:#68736c;margin-top:3px}
+body.dark{color:#e7ece8;background:#111512}body.dark .sub,body.dark label,body.dark .note,body.dark .timeline-transitions,body.dark .storage-progress,body.dark .storage-summary,body.dark .timeline-pop{color:#aab5ad}body.dark .card{background:#1a201c;border-color:#364039;box-shadow:0 2px 8px #0005}body.dark button{background:#252d28;color:#e7ece8;border-color:#536159}body.dark button.primary{background:#e7ece8;color:#17201b;border-color:#e7ece8}body.dark button.danger{color:#ff8f88}body.dark input,body.dark select{background:#151a17;color:#e7ece8;border-color:#536159}body.dark .filter-chip{background:#202722;border-color:#465249}body.dark #diagnostics thead th,body.dark #diagnostics th:nth-child(-n+3),body.dark #diagnostics td:nth-child(-n+3),body.dark #yearlyDiagnostics thead th,body.dark #yearlyDiagnostics th:nth-child(-n+2),body.dark #yearlyDiagnostics td:nth-child(-n+2){background:#1a201c}body.dark th,body.dark td{border-bottom-color:#303932}body.dark .species{border-top-color:#303932}body.dark .timeline-track{background:#202722;border-color:#465249}body.dark .timeline-segment:hover{outline-color:#f0f4f1}body.dark .intervention-box{background:#171c19;border-color:#39443c}body.dark .storage-slot{background:#171c19;border-color:#465249}body.dark .storage-slot.empty{background:#141815;color:#6f7a72}body.dark .status{background:#151a17}body.dark button:disabled{background:#202521;color:#68736c;border-color:#343c36}body.dark .branch-controls{border-top-color:#39443c}
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.53</h1>
+<div class="row"><h1>GPC Ecosystem Simulator — v0.54</h1><button id="themeToggle" class="theme-toggle" type="button" onclick="toggleTheme()">Dark mode</button></div>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -84,6 +88,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
   <input id="importSimulationFile" type="file" accept=".json,application/json" style="display:none" onchange="importSimulationFile(this)">
   <button onclick="resetSim()">Reset</button>
  </div>
+ <div class="run-custom"><label><span>Custom years</span><input id="customRunYears" type="number" min="1" step="1" value="25"></label><button type="button" onclick="runCustomYears()">Run custom</button></div>
+ <div class="branch-controls"><div class="graph-controls" style="margin:0"><label><span>Branch simulation from year</span><input id="branchYear" type="number" min="0" step="1" placeholder="e.g. 140"></label><button type="button" onclick="branchFromYear()">Resume from this year</button></div><p id="branchStatus" class="note" style="margin:5px 0 0"></p></div>
  <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.88rem"><input id="includeInvasives" type="checkbox" style="width:auto" checked onchange="toggleInvasiveSimulation()"> Include invasive species in simulation</label>
  <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. The run-controls checkbox can include or exclude all invasive species from simulation; turning it on explicitly introduces them at their authored Starting Population at the current year, while turning it off removes them from active simulation. Native Expected Population is estimated from the mature pre-invasion ecosystem. After calibration, Year 0 continues from the exact final state of the mature native burn-in rather than reconstructing a fresh ecosystem from averaged populations; the entire native state is rescaled proportionally so the anchor Expected Population matches the authored anchor. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For prey below its frozen Auto-Balance Encounter Baseline, encounterability declines in proportion to current/baseline abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
  </div>
@@ -98,8 +104,8 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
    <div id="storageSummary" class="storage-summary">0 / 5 slots used</div>
   </div>
   <div class="intervention-grid">
-   <div class="intervention-box"><h3>Eradicate</h3><div class="intervention-controls"><label><span>Species</span><select id="eradicateSpecies"></select></label><button class="danger" onclick="eradicateSelected()">Eradicate</button></div></div>
    <div class="intervention-box"><h3>Capture</h3><div class="intervention-controls"><label><span>Species</span><select id="captureSpecies" onchange="updateCaptureAvailability()"></select></label><button id="captureButton" onclick="captureOne()">Capture 1</button></div><p id="captureWarning" class="warning hidden">Not enough of this species in the wild to capture.</p><p id="storageFullWarning" class="warning hidden">Species storage is full. Purge a stored species before capturing a new one.</p></div>
+   <div class="intervention-box"><h3>Eradicate</h3><div class="intervention-controls"><label><span>Species</span><select id="eradicateSpecies"></select></label><button class="danger" onclick="eradicateSelected()">Eradicate</button></div></div>
    <div class="intervention-box"><h3>Reintroduce</h3><div class="intervention-controls three"><label><span>Preserved species</span><select id="reintroduceSpecies"></select></label><label><span>Population</span><input id="reintroduceCount" type="number" min="0" step="any" value="20"></label><button id="reintroduceButton" onclick="reintroduceSelected()">Reintroduce</button></div><p id="reintroduceEmpty" class="note hidden">Capture at least 2 individuals of a species to make it available for reintroduction.</p></div>
    <div class="intervention-box"><h3>Purge from storage</h3><div class="intervention-controls"><label><span>Stored species</span><select id="purgeSpecies"></select></label><button id="purgeButton" class="danger" onclick="purgeSelected()">Purge</button></div></div>
   </div>
@@ -116,11 +122,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
   <button type="button" onclick="applyTimelineRange()">Update timeline</button>
   <button type="button" onclick="showAllTimelineYears()">All years</button>
  </div>
- <div class="graph-controls" style="margin-bottom:10px">
-  <label><span>Branch simulation from year</span><input id="branchYear" type="number" min="0" step="1" placeholder="e.g. 140"></label>
-  <button type="button" onclick="branchFromYear()">Resume from this year</button>
- </div>
- <p id="branchStatus" class="note" style="margin-top:-4px"></p>
+ <div id="historyCurrentYear" class="current-year-banner">Current Year: 0</div>
  <div class="rating-legend"><span class="rating-key"><i class="rating-swatch rating-extinct"></i>Extinct</span><span class="rating-key"><i class="rating-swatch rating-critical"></i>Critical</span><span class="rating-key"><i class="rating-swatch rating-scarce"></i>Scarce</span><span class="rating-key"><i class="rating-swatch rating-stable"></i>Stable</span><span class="rating-key"><i class="rating-swatch rating-abundant"></i>Abundant</span><span class="rating-key"><i class="rating-swatch rating-overpopulated"></i>Overpopulated</span></div>
  <div id="populationTimeline" class="population-timeline"></div>
  <div class="graph-controls" style="margin-top:12px">
@@ -529,7 +531,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.52",
+   version:"v0.54",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -738,6 +740,13 @@ function run(n){
  for(let i=0;i<n;i++)step(false);
  validateState("run");
  renderAll();
+}
+
+function runCustomYears(){
+ const input=document.getElementById("customRunYears");
+ const n=input?Math.floor(Number(input.value)):0;
+ if(!(n>0)){alert("Enter a positive whole number of years to run.");return;}
+ input.value=n;run(n);
 }
 
 function storageEntry(sp){return storedSpecies[sp.id]||null}
@@ -1222,6 +1231,7 @@ function showAllTimelineYears(){
 }
 function draw(){
  const out=document.getElementById("populationTimeline");if(!out)return;
+ const cy=document.getElementById("historyCurrentYear");if(cy)cy.textContent=`Current Year: ${year}`;
  const {from,to}=getTimelineRange();
  const data=history.filter(r=>r.year>=from&&r.year<=to);
  if(!data.length){out.innerHTML='<p class="note">Run the simulation to build population history.</p>';return;}
@@ -1237,7 +1247,10 @@ function draw(){
    });
    if(current)segments.push(current);
    const row=document.createElement("div");row.className="timeline-row";
-   const label=document.createElement("div");label.className="timeline-label";label.textContent=speciesDisplay(sp);
+   const label=document.createElement("div");label.className="timeline-label";
+   const latest=history.find(h=>h.year===year)||history[history.length-1];
+   const currentPop=latest?snapshotPopulation(latest,sp):sp.pop;
+   label.innerHTML=`${escapeHtml(speciesDisplay(sp))}<span class="timeline-pop">${fmt(currentPop)}</span>`;
    const wrap=document.createElement("div");
    const track=document.createElement("div");track.className="timeline-track";
    const total=Math.max(1,data.length);
@@ -1252,7 +1265,20 @@ function draw(){
    wrap.append(track,transitions);row.append(label,wrap);out.appendChild(row);
  });
 }
-reorderSections();species=defaults();normalizeAllSpecies();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
+function applyTheme(theme){
+ const dark=theme==="dark";document.body.classList.toggle("dark",dark);
+ const btn=document.getElementById("themeToggle");if(btn)btn.textContent=dark?"Light mode":"Dark mode";
+}
+function toggleTheme(){
+ const next=document.body.classList.contains("dark")?"light":"dark";
+ applyTheme(next);try{localStorage.setItem("gpcTheme",next)}catch(e){}
+}
+function loadTheme(){
+ let saved=null;try{saved=localStorage.getItem("gpcTheme")}catch(e){}
+ applyTheme(saved==="dark"?"dark":"light");
+}
+
+reorderSections();species=defaults();normalizeAllSpecies();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();loadTheme();
 </script>
 </body>
 </html>
