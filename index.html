@@ -42,7 +42,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.48</h1>
+<h1>GPC Ecosystem Simulator — v0.50</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -109,13 +109,18 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 <div class="card" id="historyCard">
  <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
- <details class="note-toggle"><summary>About population history</summary><p class="note">Each species gets a categorical population timeline relative to its population-health reference. Native species use calibrated Expected Population. Invasive species use Expected Population Override when supplied; otherwise they use their authored Reference Species. Extinct = 0; Critical = above 0 but below 10%; Scarce = 10–50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p></details>
+ <details class="note-toggle"><summary>About population history</summary><p class="note">Each species gets a categorical population timeline relative to its population-health reference. You can branch from any recorded year: the simulator restores that year’s state, discards the later timeline/diagnostics, and continues forward from there. Native species use calibrated Expected Population. Invasive species use Expected Population Override when supplied; otherwise they use their authored Reference Species. Extinct = 0; Critical = above 0 but below 10%; Scarce = 10–50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p></details>
  <div class="graph-controls" style="margin-bottom:10px">
   <label><span>Timeline from year</span><input id="timelineFrom" type="number" min="0" step="1" placeholder="0"></label>
   <label><span>To year</span><input id="timelineTo" type="number" min="0" step="1" placeholder="Latest"></label>
   <button type="button" onclick="applyTimelineRange()">Update timeline</button>
   <button type="button" onclick="showAllTimelineYears()">All years</button>
  </div>
+ <div class="graph-controls" style="margin-bottom:10px">
+  <label><span>Branch simulation from year</span><input id="branchYear" type="number" min="0" step="1" placeholder="e.g. 140"></label>
+  <button type="button" onclick="branchFromYear()">Resume from this year</button>
+ </div>
+ <p id="branchStatus" class="note" style="margin-top:-4px"></p>
  <div class="rating-legend"><span class="rating-key"><i class="rating-swatch rating-extinct"></i>Extinct</span><span class="rating-key"><i class="rating-swatch rating-critical"></i>Critical</span><span class="rating-key"><i class="rating-swatch rating-scarce"></i>Scarce</span><span class="rating-key"><i class="rating-swatch rating-stable"></i>Stable</span><span class="rating-key"><i class="rating-swatch rating-abundant"></i>Abundant</span><span class="rating-key"><i class="rating-swatch rating-overpopulated"></i>Overpopulated</span></div>
  <div id="populationTimeline" class="population-timeline"></div>
  <div class="graph-controls" style="margin-top:12px">
@@ -208,8 +213,8 @@ function normalizeSpecies(sp={}){
 }
 function normalizeAllSpecies(){species.forEach(normalizeSpecies);rebuildSpeciesIndex();}
 function snapshotPopulation(snap,sp){
- const byId=Number(snap?.populations?.[sp.id]); if(Number.isFinite(byId))return Math.max(0,byId);
- const legacy=Number(snap?.[sp.name]); return Number.isFinite(legacy)?Math.max(0,legacy):0;
+ const value=Number(snap?.populations?.[sp.id]);
+ return Number.isFinite(value)?Math.max(0,value):0;
 }
 function renderCore(){renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();}
 function renderDiagnosticsPanels(){renderDiagnostics();renderYearlyDiagnostics();}
@@ -256,9 +261,38 @@ function populationStateRecord(sp,pop){
 }
 function snapshot(){
  ensureSpeciesIds();
- let o={year,populations:{},populationStates:{}};
- species.forEach(sp=>{o.populations[sp.id]=sp.pop;o[sp.name]=sp.pop;o.populationStates[sp.id]=populationStateRecord(sp,sp.pop)});
+ let o={year,populations:{},populationStates:{},storedSpecies:structuredCloneSafe(storedSpecies),includeInvasives:invasivesEnabled()};
+ species.forEach(sp=>{o.populations[sp.id]=sp.pop;o.populationStates[sp.id]=populationStateRecord(sp,sp.pop)});
  return o;
+}
+function structuredCloneSafe(value){
+ return value==null?value:JSON.parse(JSON.stringify(value));
+}
+function branchFromYear(){
+ sync();
+ const input=document.getElementById("branchYear"),status=document.getElementById("branchStatus");
+ const target=input&&input.value!==""?Math.floor(Number(input.value)):NaN;
+ if(!Number.isFinite(target)||target<0){if(status)status.textContent="Enter a valid year to branch from.";return;}
+ const snap=history.find(h=>h.year===target);
+ if(!snap){if(status)status.textContent=`No population snapshot exists for Year ${target}.`;return;}
+ // Restore the exact end-of-year wild populations recorded at the branch point.
+ species.forEach(sp=>{sp.pop=snapshotPopulation(snap,sp)});
+ year=target;
+ storedSpecies=structuredCloneSafe(snap.storedSpecies);
+ const inv=document.getElementById("includeInvasives");if(inv)inv.checked=!!snap.includeInvasives;
+ // This is a true branch: discard the abandoned future from every time-indexed data source.
+ history=history.filter(h=>h.year<=target);
+ diagnosticRows=diagnosticRows.filter(r=>Number(r.year)<=target);
+ invalidateDiagnosticCache();
+ lastStats={};
+ const yr=yearlyRows().filter(r=>r.year===target);
+ yr.forEach(r=>{const sp=speciesByIdGet(r.speciesId)||species.find(x=>x.name===r.species);if(sp)lastStats[sp.name]=r;});
+ refreshPopulationStateLedger();
+ validateState("branch");
+ const iy=document.getElementById("illustrateYear");if(iy&&Number(iy.value)>year)iy.value=year;
+ const tf=document.getElementById("timelineTo");if(tf&&tf.value!==""&&Number(tf.value)>year)tf.value=year;
+ renderAll();
+ if(status)status.textContent=`Branched from Year ${target}. Future history and diagnostics were discarded. Stored species and invasive state were restored to this year.`;
 }
 function refreshPopulationStateLedger(){
  ensureSpeciesIds();
@@ -495,7 +529,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.48",
+   version:"v0.50",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -535,18 +569,18 @@ function importSimulationFile(input){
 }
 function importSimulation(data){
  if(!data||data.format!=="GPC Ecosystem Simulator Export"||!Array.isArray(data.species)||!Array.isArray(data.populationHistory))throw new Error("This does not look like a GPC Ecosystem Simulator export.");
- let legacyMissingEncounter=false;
- species=data.species.map(x=>{
-  if(x.encounterBaseline==null)legacyMissingEncounter=true;
-  return {id:x.id||newSpeciesId(),name:x.name||"Species",emoji:x.emoji||"",referenceSpecies:x.referenceSpecies||"",invasiveExpectedOverride:Number.isFinite(x.invasiveExpectedOverride)?x.invasiveExpectedOverride:null,type:x.type,
+ const versionMatch=/^v0\.(\d+)$/.exec(String(data.version||""));
+ const versionNumber=versionMatch?Number(versionMatch[1]):NaN;
+ if(!Number.isFinite(versionNumber)||versionNumber<49)throw new Error("This simulator imports v0.49+ exports only. Older exports are no longer supported.");
+ species=data.species.map(x=>({
+   id:x.id,name:x.name||"Species",emoji:x.emoji||"",referenceSpecies:x.referenceSpecies||"",invasiveExpectedOverride:Number.isFinite(x.invasiveExpectedOverride)?x.invasiveExpectedOverride:null,type:x.type,
    pop:Math.max(0,Number(x.currentPopulation)||0),startPop:Math.max(0,Number(x.startingPopulation)||0),expectedPop:Math.max(0,Number(x.expectedPopulation)||0),
    capacity:Math.max(0,Number(x.carryingCapacity)||0),regrowth:Number(x.annualRegrowthPercent)||0,
    minBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[0]:null,maxBirth:Array.isArray(x.birthsPerYearPer2)?x.birthsPerYearPer2[1]:null,
    lifespan:x.lifespanYears,survival:Number(x.survivalFoodKgPerYear)||0,reproSurplus:Number(x.reproductionSurplusPercent)||0,
    edible:Number(x.edibleBiomassKg)||0,pred:Number(x.predationRating)||0,prey:x.validPrey||"",invasive:!!x.isInvasive,
-   encounterBaseline:x.encounterBaseline==null?Math.max(0,Number(x.startingPopulation)||0):Math.max(0,Number(x.encounterBaseline)||0),
-   graph:x.graphEnabled!==false,healthyViz:x.healthyVisualizationBaseline||null};
- });
+   encounterBaseline:Math.max(0,Number(x.encounterBaseline)||0),graph:x.graphEnabled!==false,healthyViz:x.healthyVisualizationBaseline||null
+ }));
  normalizeAllSpecies();
  globalVizFallback=data.invasiveVisualizationFallback||null;
  storedSpecies=(data.speciesStorage&&typeof data.speciesStorage==="object")?data.speciesStorage:{};
@@ -560,10 +594,9 @@ function importSimulation(data){
  renderEditors();refreshAnchor();refreshGraphSpeciesFilter();refreshDiagnosticSpeciesFilters();
  renderAll();
  const status=document.getElementById("balanceStatus");
- if(status)status.textContent=legacyMissingEncounter
-   ?`Imported ${data.version||"legacy"} session through Year ${year}. This older export did not store Encounter Baselines, so its history is preserved for analysis, but recalibrate before continuing the simulation if you need identical ecology physics.`
-   :`Imported ${data.version||"GPC"} session through Year ${year}. History, diagnostics, calibrated baselines, and current populations restored.`;
+ if(status)status.textContent=`Imported ${data.version} session through Year ${year}. History, diagnostics, calibrated baselines, interventions, and current populations restored.`;
 }
+
 function reorderSections(){
  const order=["speciesCard","calibrateCard","runCard","interventionsCard","historyCard","currentCard","visualizationCard","analysisCard","yearlyCard","monthlyCard"];
  const first=document.getElementById(order[0]); if(!first)return;
