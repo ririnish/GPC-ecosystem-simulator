@@ -38,10 +38,11 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 @media(max-width:600px){.timeline-row{grid-template-columns:82px 1fr}.timeline-label{font-size:.78rem}}
 .note{font-size:.8rem;color:#68736c}.balance-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end}.status{margin-top:10px;padding:10px;border-radius:9px;background:#f5f7f5;font-size:.86rem;white-space:pre-line}@media(max-width:600px){.balance-grid{grid-template-columns:1fr 1fr}.balance-grid button{grid-column:1/-1}}
 @media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}table{font-size:.78rem}th,td{padding:6px 3px}.hide-mobile{display:none}}
+.intervention-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px}.intervention-box{border:1px solid #e0e4e1;border-radius:11px;padding:11px;background:#fafbf9}.intervention-box h3{font-size:.92rem;margin:0 0 8px}.intervention-controls{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.intervention-controls.three{grid-template-columns:1fr 110px auto}.warning{font-size:.78rem;color:#b3261e;margin:7px 0 0}.hidden{display:none!important}button:disabled{cursor:not-allowed;color:#8c948f;background:#ecefed;border-color:#d7dcd8}.storage-wrap{margin-bottom:14px}.storage-slots{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.storage-slot{min-height:76px;border:1px solid #cbd2cd;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px;text-align:center;background:#fbfcfb}.storage-slot.empty{color:#a7aea9;background:#f6f7f6}.storage-animals{font-size:1.35rem;line-height:1.25;white-space:nowrap}.storage-progress{font-size:.75rem;margin-top:5px;color:#68736c}.storage-progress.preserved{color:#2f7d45;font-weight:700}.storage-summary{font-size:.76rem;color:#68736c;margin-top:6px;text-align:right}@media(max-width:700px){.intervention-grid{grid-template-columns:1fr}.storage-slots{gap:4px}.storage-slot{min-height:70px;padding:5px}.storage-animals{font-size:1.1rem}.storage-progress{font-size:.68rem}.intervention-controls.three{grid-template-columns:1fr 90px auto}}
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.44</h1>
+<h1>GPC Ecosystem Simulator — v0.45</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -88,10 +89,27 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  </div>
 </div>
 
+<div class="card" id="interventionsCard">
+ <div class="section-head" onclick="toggleSection(this)"><h2>Player interventions</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
+ <div class="section-body">
+  <div class="storage-wrap">
+   <strong style="font-size:.9rem">Species storage</strong>
+   <div id="storageSlots" class="storage-slots" style="margin-top:7px"></div>
+   <div id="storageSummary" class="storage-summary">0 / 5 slots used</div>
+  </div>
+  <div class="intervention-grid">
+   <div class="intervention-box"><h3>Eradicate</h3><div class="intervention-controls"><label><span>Species</span><select id="eradicateSpecies"></select></label><button class="danger" onclick="eradicateSelected()">Eradicate</button></div></div>
+   <div class="intervention-box"><h3>Capture</h3><div class="intervention-controls"><label><span>Species</span><select id="captureSpecies" onchange="updateCaptureAvailability()"></select></label><button id="captureButton" onclick="captureOne()">Capture 1</button></div><p id="captureWarning" class="warning hidden">Not enough of this species in the wild to capture.</p><p id="storageFullWarning" class="warning hidden">Species storage is full. Purge a stored species before capturing a new one.</p></div>
+   <div class="intervention-box"><h3>Reintroduce</h3><div class="intervention-controls three"><label><span>Preserved species</span><select id="reintroduceSpecies"></select></label><label><span>Population</span><input id="reintroduceCount" type="number" min="0" step="any" value="20"></label><button id="reintroduceButton" onclick="reintroduceSelected()">Reintroduce</button></div><p id="reintroduceEmpty" class="note hidden">Capture at least 2 individuals of a species to make it available for reintroduction.</p></div>
+   <div class="intervention-box"><h3>Purge from storage</h3><div class="intervention-controls"><label><span>Stored species</span><select id="purgeSpecies"></select></label><button id="purgeButton" class="danger" onclick="purgeSelected()">Purge</button></div></div>
+  </div>
+ </div>
+</div>
+
 <div class="card" id="historyCard">
  <div class="section-head" onclick="toggleSection(this)"><h2>Population history</h2><button class="collapse-btn" type="button" aria-label="Collapse section" onclick="event.stopPropagation();toggleSection(this.closest('.section-head'))">−</button></div>
  <div class="section-body">
- <p class="note">Each species gets a categorical population timeline relative to its population-health reference. Native species use calibrated Expected Population. Invasive species use Expected Population Override when supplied; otherwise they use their authored Reference Species. Extinct = 0; Critical = above 0 but below 10%; Scarce = 10–50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p>
+ <details class="note-toggle"><summary>About population history</summary><p class="note">Each species gets a categorical population timeline relative to its population-health reference. Native species use calibrated Expected Population. Invasive species use Expected Population Override when supplied; otherwise they use their authored Reference Species. Extinct = 0; Critical = above 0 but below 10%; Scarce = 10–50%; Stable = 50–150%; Abundant = 150–250%; Overpopulated = 250% or more. Labels below each bar mark every year in which the rating changes.</p></details>
  <div class="graph-controls" style="margin-bottom:10px">
   <label><span>Timeline from year</span><input id="timelineFrom" type="number" min="0" step="1" placeholder="0"></label>
   <label><span>To year</span><input id="timelineTo" type="number" min="0" step="1" placeholder="Latest"></label>
@@ -165,6 +183,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 let diagnosticRows=[];
 
 let species=[], year=0, history=[], lastStats={}, globalVizFallback=null;
+let storedSpecies={}; const STORAGE_SLOTS=5;
 
 function defaults(){
  return [
@@ -190,8 +209,8 @@ function resetSim(keep=false){
    if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop;
    s.pop=s.startPop;
  });
- year=0; history=[snapshot()]; lastStats={}; appliedAnalysisRange=null;
- renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics();
+ year=0; history=[snapshot()]; lastStats={}; appliedAnalysisRange=null; storedSpecies={};
+ renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics(); renderInterventions();
 }
 function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
 function rnd(a,b){return a+Math.random()*(b-a)}
@@ -407,7 +426,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.44",
+   version:"v0.45",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -422,6 +441,7 @@ function exportSimulation(){
    })),
    populationHistory:history,
    invasiveVisualizationFallback:globalVizFallback,
+   speciesStorage:storedSpecies,
    yearlyDiagnostics:yearly,
    monthlyDiagnostics:diagnosticRows
  };
@@ -460,6 +480,7 @@ function importSimulation(data){
  });
  ensureSpeciesIds();
  globalVizFallback=data.invasiveVisualizationFallback||null;
+ storedSpecies=(data.speciesStorage&&typeof data.speciesStorage==="object")?data.speciesStorage:{};
  year=Math.max(0,parseInt(data.simulatedThroughYear,10)||0);
  history=data.populationHistory.map(r=>({...r,year:Number(r.year)||0}));
  diagnosticRows=Array.isArray(data.monthlyDiagnostics)?data.monthlyDiagnostics.map(r=>({...r})):[];
@@ -467,14 +488,14 @@ function importSimulation(data){
  if(latest)species.forEach(sp=>{if(Number.isFinite(Number(latest[sp.name])))sp.pop=Math.max(0,Number(latest[sp.name]));});
  const inv=document.getElementById("includeInvasives"); if(inv&&typeof data.includeInvasives==="boolean")inv.checked=data.includeInvasives;
  renderEditors();refreshAnchor();refreshGraphSpeciesFilter();refreshDiagnosticSpeciesFilters();
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();renderInterventions();
  const status=document.getElementById("balanceStatus");
  if(status)status.textContent=legacyMissingEncounter
    ?`Imported ${data.version||"legacy"} session through Year ${year}. This older export did not store Encounter Baselines, so its history is preserved for analysis, but recalibrate before continuing the simulation if you need identical ecology physics.`
    :`Imported ${data.version||"GPC"} session through Year ${year}. History, diagnostics, calibrated baselines, and current populations restored.`;
 }
 function reorderSections(){
- const order=["speciesCard","calibrateCard","runCard","historyCard","currentCard","visualizationCard","analysisCard","yearlyCard","monthlyCard"];
+ const order=["speciesCard","calibrateCard","runCard","interventionsCard","historyCard","currentCard","visualizationCard","analysisCard","yearlyCard","monthlyCard"];
  const first=document.getElementById(order[0]); if(!first)return;
  const parent=first.parentNode;
  order.forEach(id=>{const el=document.getElementById(id);if(el)parent.appendChild(el);});
@@ -593,9 +614,51 @@ function toggleInvasiveSimulation(){
  // Treat the toggle as an explicit introduction/removal event at the current year.
  // Replace the current-year snapshot so graphs/state immediately reflect the choice.
  if(history.length)history[history.length-1]=snapshot();
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();
 }
-function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics()}
+function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();renderInterventions()}
+
+function storageEntry(sp){return storedSpecies[sp.id]||null}
+function storageCount(sp){const e=storageEntry(sp);return e?Math.max(0,Math.floor(Number(e.count)||0)):0}
+function storedEntries(){ensureSpeciesIds();return species.map(sp=>({sp,count:storageCount(sp)})).filter(x=>x.count>0)}
+function preservedEntries(){return storedEntries().filter(x=>x.count>=2)}
+function commitInterventionState(){
+ if(history.length){const idx=history.findIndex(h=>h.year===year);const snap=snapshot();if(idx>=0)history[idx]=snap;else history.push(snap)}
+ renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();
+}
+function renderInterventions(){
+ const slots=document.getElementById("storageSlots");if(!slots)return;ensureSpeciesIds();
+ const allOpts=species.map(sp=>`<option value="${escapeHtml(sp.id)}">${escapeHtml(speciesDisplay(sp))} — ${escapeHtml(sp.name)}</option>`).join("");
+ for(const id of ["eradicateSpecies","captureSpecies"]){const el=document.getElementById(id);if(el){const old=el.value;el.innerHTML=allOpts;if([...el.options].some(o=>o.value===old))el.value=old;}}
+ const entries=storedEntries();
+ let boxes=entries.slice(0,STORAGE_SLOTS).map(({sp,count})=>{const emoji=sp.emoji||"◉";const animals=count<=2?Array(count).fill(escapeHtml(emoji)).join(""):escapeHtml(emoji)+` ×${count}`;const ok=count>=2;return `<div class="storage-slot"><div class="storage-animals">${animals}</div><div class="storage-progress ${ok?'preserved':''}">${ok?'2 / 2 ✓':count+' / 2'}</div></div>`});
+ while(boxes.length<STORAGE_SLOTS)boxes.push('<div class="storage-slot empty"><div class="storage-animals">×</div></div>');
+ slots.innerHTML=boxes.join("");
+ const summary=document.getElementById("storageSummary");if(summary)summary.textContent=`${entries.length} / ${STORAGE_SLOTS} slots used`;
+ const preserved=preservedEntries();
+ const rsel=document.getElementById("reintroduceSpecies"),rbtn=document.getElementById("reintroduceButton"),rempty=document.getElementById("reintroduceEmpty");
+ if(rsel){const old=rsel.value;rsel.innerHTML=preserved.map(({sp})=>`<option value="${escapeHtml(sp.id)}">${escapeHtml(speciesDisplay(sp))} — ${escapeHtml(sp.name)}</option>`).join("");if([...rsel.options].some(o=>o.value===old))rsel.value=old;}
+ if(rbtn)rbtn.disabled=!preserved.length;if(rempty)rempty.classList.toggle("hidden",!!preserved.length);
+ const psel=document.getElementById("purgeSpecies"),pbtn=document.getElementById("purgeButton");
+ if(psel){const old=psel.value;psel.innerHTML=entries.map(({sp,count})=>`<option value="${escapeHtml(sp.id)}">${escapeHtml(speciesDisplay(sp))} — ${escapeHtml(sp.name)} (${count})</option>`).join("");if([...psel.options].some(o=>o.value===old))psel.value=old;}
+ if(pbtn)pbtn.disabled=!entries.length;
+ updateCaptureAvailability();
+}
+function updateCaptureAvailability(){
+ const sel=document.getElementById("captureSpecies"),btn=document.getElementById("captureButton"),warn=document.getElementById("captureWarning"),full=document.getElementById("storageFullWarning");if(!sel||!btn)return;
+ const sp=species.find(s=>s.id===sel.value);const tooFew=!sp||!(sp.pop>=1);const already=sp&&storageCount(sp)>0;const storageFull=!!sp&&!already&&storedEntries().length>=STORAGE_SLOTS;
+ btn.disabled=tooFew||storageFull;if(warn)warn.classList.toggle("hidden",!tooFew);if(full)full.classList.toggle("hidden",!storageFull);
+}
+function eradicateSelected(){sync();const sel=document.getElementById("eradicateSpecies"),sp=sel&&species.find(s=>s.id===sel.value);if(!sp)return;sp.pop=0;commitInterventionState()}
+function captureOne(){
+ sync();const sel=document.getElementById("captureSpecies"),sp=sel&&species.find(s=>s.id===sel.value);if(!sp)return;
+ if(!(sp.pop>=1)){renderInterventions();return}if(storageCount(sp)<=0&&storedEntries().length>=STORAGE_SLOTS){renderInterventions();return}
+ sp.pop=Math.max(0,sp.pop-1);const e=storedSpecies[sp.id]||{count:0};e.count=Math.floor(Number(e.count)||0)+1;storedSpecies[sp.id]=e;commitInterventionState();
+}
+function reintroduceSelected(){
+ sync();const sel=document.getElementById("reintroduceSpecies"),sp=sel&&species.find(s=>s.id===sel.value);const input=document.getElementById("reintroduceCount");const n=input?Math.max(0,Number(input.value)||0):0;if(!sp||storageCount(sp)<2||!(n>0))return;sp.pop=Math.max(0,sp.pop)+n;commitInterventionState();
+}
+function purgeSelected(){const sel=document.getElementById("purgeSpecies"),id=sel&&sel.value;if(!id||!storedSpecies[id])return;delete storedSpecies[id];renderInterventions()}
 
 function sync(){
  document.querySelectorAll(".species").forEach((d,i)=>{
@@ -870,8 +933,8 @@ function autoBalance(){
    }
  });
 
- year=0;lastStats={};diagnosticRows=[];history=[snapshot()];
- renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();
+ year=0;lastStats={};diagnosticRows=[];history=[snapshot()];storedSpecies={};
+ renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();renderInterventions();
 
  const extinctNatives=species.filter(sp=>!sp.invasive && sp.survival>0 && !(sp.startPop>0)).map(sp=>sp.name);
  let lines=["Calibrated native ecosystem from "+anchorName+" Auto-Balance seed = "+fmt(anchorPop)+"."];
