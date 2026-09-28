@@ -42,7 +42,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.50</h1>
+<h1>GPC Ecosystem Simulator — v0.53</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -64,7 +64,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  <p class="note">Pick one native consumer as the anchor. Auto-balance creates a native-only seed, then hidden pre-simulation estimates the mature healthy baseline. The Auto-Balance result is frozen as the Encounter Baseline used by prey encounterability. A single native-only burn-in then observes the mature healthy population without feeding that observation back into simulation physics. Expected Population is the mature long-term mean, and Year 0 continues from the exact final burn-in state. Invasive species keep their authored introduction population.</p>
  <div class="balance-grid">
   <label><span>Anchor species</span><select id="anchor"></select></label>
-  <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="20"></label>
+  <label><span>Anchor population</span><input id="anchorPop" type="number" step="any" min="0" value="30"></label>
   <button class="primary" onclick="autoBalance()">Calibrate ecosystem</button>
  </div>
  <div id="balanceStatus" class="status">Choose a native anchor and calibrate the pre-invasion ecosystem.</div>
@@ -232,7 +232,7 @@ function defaults(){
   {name:"Rabbit",emoji:"🐇",pop:5000,startPop:5000,expectedPop:5000,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Carrot",graph:true,invasive:false},
   {name:"Fox",emoji:"🦊",pop:100,startPop:100,expectedPop:100,capacity:0,regrowth:600,minBirth:2,maxBirth:7,lifespan:10,survival:100,reproSurplus:20,edible:8,pred:7,prey:"Rabbit, KILLER Rabbit",graph:true,invasive:false},
   {name:"Wolf",emoji:"🐺",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:4,lifespan:12,survival:150,reproSurplus:20,edible:30,pred:5,prey:"Fox",graph:true,invasive:false},
-  {name:"KILLER Rabbit",emoji:"🩸🐰",referenceSpecies:"Rabbit",invasiveExpectedOverride:null,pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Rabbit",graph:true,invasive:true}
+  {name:"KILLER Rabbit",emoji:"🩸🐰",referenceSpecies:"Rabbit",invasiveExpectedOverride:20000,pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:15,maxBirth:30,lifespan:10,survival:40,reproSurplus:20,edible:2,pred:10,prey:"Rabbit",graph:true,invasive:true}
  ];
 }
 function loadDefaults(){
@@ -529,7 +529,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.50",
+   version:"v0.52",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -731,14 +731,25 @@ function toggleInvasiveSimulation(){
  if(history.length)history[history.length-1]=snapshot();
  renderCore();
 }
-function run(n){for(let i=0;i<n;i++)step();validateState("run");renderAll()}
+function run(n){
+ // Read editor state and rebuild any reference-dependent derived state once.
+ // Individual simulated years must not rescan/rebuild the entire accumulated history.
+ sync();
+ for(let i=0;i<n;i++)step(false);
+ validateState("run");
+ renderAll();
+}
 
 function storageEntry(sp){return storedSpecies[sp.id]||null}
 function storageCount(sp){const e=storageEntry(sp);return e?Math.max(0,Math.floor(Number(e.count)||0)):0}
 function storedEntries(){ensureSpeciesIds();return species.map(sp=>({sp,count:storageCount(sp)})).filter(x=>x.count>0)}
 function preservedEntries(){return storedEntries().filter(x=>x.count>=2)}
 function commitInterventionState(){
- if(history.length){const idx=history.findIndex(h=>h.year===year);const snap=snapshot();if(idx>=0)history[idx]=snap;else history.push(snap)}
+ if(history.length){
+   const snap=snapshot(),last=history[history.length-1];
+   if(last&&last.year===year)history[history.length-1]=snap;
+   else {const idx=history.findIndex(h=>h.year===year);if(idx>=0)history[idx]=snap;else history.push(snap)}
+ }
  validateState("intervention");renderCore();
 }
 function renderInterventions(){
@@ -1071,10 +1082,10 @@ function esc(v){return String(v).replaceAll("&","&amp;").replaceAll('"',"&quot;"
 function round(x){return Math.round(x*100)/100}
 
 function renderState(){
- const {to}=getAnalysisRange();
- const selectedYear=Math.max(0,Math.min(year,to));
+ // Current State always represents the live simulation head. Analysis Range is diagnostics-only.
+ const selectedYear=year;
  document.getElementById("year").textContent=selectedYear;
- const snap=history.find(h=>h.year===selectedYear)||history[history.length-1]||{};
+ const snap=history[history.length-1]||{};
  const annual=new Map(yearlyRows().filter(r=>r.year===selectedYear).map(r=>[r.speciesId||r.species,r]));
  let tb=document.getElementById("state");tb.innerHTML="";
  species.forEach(sp=>{
@@ -1187,14 +1198,22 @@ function populationRatingSlug(label){return POPULATION_RATING_BY_LABEL.get(label
 function ratingLabel(slug){return POPULATION_RATING_BY_SLUG.get(slug)?.label||slug;}
 let appliedTimelineRange=null;
 function getTimelineRange(){
- if(appliedTimelineRange)return {from:appliedTimelineRange.from,to:Math.min(appliedTimelineRange.to,year)};
+ // A blank "To year" means a live range whose endpoint follows the simulation head.
+ // Only an explicitly authored To value should pin Population History to a past year.
+ if(appliedTimelineRange){
+   const to=appliedTimelineRange.to==null?year:Math.min(appliedTimelineRange.to,year);
+   return {from:Math.min(appliedTimelineRange.from,to),to};
+ }
  return {from:0,to:year};
 }
 function applyTimelineRange(){
  const a=document.getElementById("timelineFrom"),b=document.getElementById("timelineTo");
- let from=a&&a.value!==""?Math.max(0,parseInt(a.value,10)||0):0;
- let to=b&&b.value!==""?Math.max(from,parseInt(b.value,10)||year):year;
- appliedTimelineRange={from,to:Math.min(to,year)};draw();
+ const from=a&&a.value!==""?Math.max(0,parseInt(a.value,10)||0):0;
+ const hasExplicitTo=!!(b&&b.value!=="");
+ const explicitTo=hasExplicitTo?Math.max(from,parseInt(b.value,10)||from):null;
+ // Preserve null rather than replacing a blank endpoint with the current year.
+ // This keeps the range live as future years are appended.
+ appliedTimelineRange={from,to:explicitTo};draw();
 }
 function showAllTimelineYears(){
  appliedTimelineRange=null;
