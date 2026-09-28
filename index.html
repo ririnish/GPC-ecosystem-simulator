@@ -46,7 +46,7 @@ body.dark{color:#e7ece8;background:#111512}body.dark .sub,body.dark label,body.d
 </style>
 </head>
 <body>
-<div class="row"><h1>GPC Ecosystem Simulator — v0.54</h1><button id="themeToggle" class="theme-toggle" type="button" onclick="toggleTheme()">Dark mode</button></div>
+<div class="row"><h1>GPC Ecosystem Simulator — v0.55</h1><button id="themeToggle" class="theme-toggle" type="button" onclick="toggleTheme()">Dark mode</button></div>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -315,6 +315,10 @@ function snapshotPopulationState(snap,sp){
 }
 function rnd(a,b){return a+Math.random()*(b-a)}
 function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
+function normalizeConsumerPopulation(sp){
+ if((sp.survival||0)>0){sp.pop=Math.max(0,Math.round(Number(sp.pop)||0));if(sp.pop<1)sp.pop=0;}
+ return sp.pop;
+}
 
 function step(syncFromUI=true){
  if(syncFromUI)sync();
@@ -325,7 +329,7 @@ function step(syncFromUI=true){
  // be hunted, and die beginning the next month instead of materializing in one
  // year-end pulse. The breeding pool is frozen at the start of the year so those
  // newborns do not increase reproductive eligibility until the following year.
- const annualBreedingPool=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:Math.max(0,sp.pop));
+ const annualBreedingPool=species.map(sp=>(sp.invasive&&!invasivesEnabled())?0:((sp.survival||0)>0?Math.max(0,Math.round(sp.pop)):Math.max(0,sp.pop)));
  for(let month=0;month<12;month++)stepMonth(annualBreedingPool,month+1);
  year++;
  history.push(snapshot());
@@ -453,6 +457,9 @@ function stepMonth(annualBreedingPool,monthNo){
  species.forEach((sp,i)=>{
    lastStats[i]??={births:0,natural:0,predation:0,starve:0,food:0,eligible:0};
    if(sp.invasive&&!invasivesEnabled()){sp.pop=0;monthDiag[i].end=0;return;}
+   // Zero-population consumers are locally extinct, whether by ecological collapse or
+   // player eradication. Include Invasives must not keep an absent species active.
+   if((sp.survival||0)>0 && !(start[i]>0)){sp.pop=0;monthDiag[i].postPred=0;monthDiag[i].end=0;return;}
    const base=afterFeeding[i];
    const natural=sp.lifespan>0?Math.min(base,base/sp.lifespan*dt):0;
    let alive=Math.max(0,base-natural);lastStats[i].natural+=natural;monthDiag[i].naturalDeaths=natural;
@@ -492,11 +499,10 @@ function stepMonth(annualBreedingPool,monthNo){
      // Births recruit immediately after this month’s mortality/feeding resolution.
      // They become active ecological participants on the next monthly tick, while
      // annualBreedingPool prevents them from breeding until the next simulated year.
-     sp.pop=Math.max(0,supported+births);
-     // Continuous math is useful internally, but a real consumer population cannot
-     // contain a fraction of one organism. Crossing below one individual is extinction.
-     // Extinction is absorbing unless a future explicit reintroduction mechanic changes it.
-     if(sp.pop>0 && sp.pop<1)sp.pop=0;
+     // Continuous ecological math resolves within the month, then consumers commit as
+     // discrete whole individuals so display, capture, extinction, and simulation agree.
+     sp.pop=Math.max(0,Math.round(supported+births));
+     if(sp.pop<1)sp.pop=0;
    }else{
      let growth=0;
      if(sp.capacity>0){
@@ -531,7 +537,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.54",
+   version:"v0.55",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -781,17 +787,18 @@ function renderInterventions(){
 }
 function updateCaptureAvailability(){
  const sel=document.getElementById("captureSpecies"),btn=document.getElementById("captureButton"),warn=document.getElementById("captureWarning"),full=document.getElementById("storageFullWarning");if(!sel||!btn)return;
- const sp=speciesByIdGet(sel.value);const tooFew=!sp||!(sp.pop>=1);const already=sp&&storageCount(sp)>0;const storageFull=!!sp&&!already&&storedEntries().length>=STORAGE_SLOTS;
+ const sp=speciesByIdGet(sel.value);if(sp&&(sp.survival||0)>0)normalizeConsumerPopulation(sp);const tooFew=!sp||!(sp.pop>=1);const already=sp&&storageCount(sp)>0;const storageFull=!!sp&&!already&&storedEntries().length>=STORAGE_SLOTS;
  btn.disabled=tooFew||storageFull;if(warn)warn.classList.toggle("hidden",!tooFew);if(full)full.classList.toggle("hidden",!storageFull);
 }
 function eradicateSelected(){sync();const sel=document.getElementById("eradicateSpecies"),sp=sel&&speciesByIdGet(sel.value);if(!sp)return;sp.pop=0;commitInterventionState()}
 function captureOne(){
  sync();const sel=document.getElementById("captureSpecies"),sp=sel&&speciesByIdGet(sel.value);if(!sp)return;
+ if((sp.survival||0)>0)normalizeConsumerPopulation(sp);
  if(!(sp.pop>=1)){renderInterventions();return}if(storageCount(sp)<=0&&storedEntries().length>=STORAGE_SLOTS){renderInterventions();return}
  sp.pop=Math.max(0,sp.pop-1);const e=storedSpecies[sp.id]||{count:0};e.count=Math.floor(Number(e.count)||0)+1;storedSpecies[sp.id]=e;commitInterventionState();
 }
 function reintroduceSelected(){
- sync();const sel=document.getElementById("reintroduceSpecies"),sp=sel&&speciesByIdGet(sel.value);const input=document.getElementById("reintroduceCount");const n=input?Math.max(0,Number(input.value)||0):0;if(!sp||storageCount(sp)<2||!(n>0))return;sp.pop=Math.max(0,sp.pop)+n;commitInterventionState();
+ sync();const sel=document.getElementById("reintroduceSpecies"),sp=sel&&speciesByIdGet(sel.value);const input=document.getElementById("reintroduceCount");let n=input?Math.max(0,Number(input.value)||0):0;if(!sp||storageCount(sp)<2||!(n>0))return;if((sp.survival||0)>0)n=Math.max(1,Math.round(n));sp.pop=Math.max(0,sp.pop)+n;if((sp.survival||0)>0)normalizeConsumerPopulation(sp);commitInterventionState();
 }
 function purgeSelected(){const sel=document.getElementById("purgeSpecies"),id=sel&&sel.value;if(!id||!storedSpecies[id])return;delete storedSpecies[id];renderInterventions()}
 
