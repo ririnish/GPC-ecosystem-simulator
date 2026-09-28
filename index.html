@@ -42,7 +42,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 </style>
 </head>
 <body>
-<h1>GPC Ecosystem Simulator — v0.45</h1>
+<h1>GPC Ecosystem Simulator — v0.48</h1>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -174,7 +174,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
  <div class="section-body">
  <div><span class="small">Species to display</span><div id="monthlySpeciesFilter" class="filter-chips"></div>
  <button type="button" onclick="applyDiagnosticSpeciesFilter('monthly')">Update</button></div>
- <p class="note">Trace each monthly step to find the first value that goes off the rails. Set an explicit Analysis Range before this table loads.</p>
+ <p class="note">Trace each monthly step to find the first value that goes off the rails. Set an explicit Analysis Range before this table loads. Diagnostic data is indexed and aggregated once, then reused while you inspect it.</p>
  <div id="diagnostics" style="overflow:auto;max-height:520px"></div>
  </div>
 </div>
@@ -184,6 +184,42 @@ let diagnosticRows=[];
 
 let species=[], year=0, history=[], lastStats={}, globalVizFallback=null;
 let storedSpecies={}; const STORAGE_SLOTS=5;
+let speciesById=new Map();
+const POPULATION_RATINGS=[
+ {label:"Extinct",slug:"extinct",maxRatio:null,color:"#555"},
+ {label:"Critical",slug:"critical",maxRatio:.1,color:"#d32f2f"},
+ {label:"Scarce",slug:"scarce",maxRatio:.5,color:"#e58b2a"},
+ {label:"Stable",slug:"stable",maxRatio:1.5,color:"#5c9b62"},
+ {label:"Abundant",slug:"abundant",maxRatio:2.5,color:"#4285c5"},
+ {label:"Overpopulated",slug:"overpopulated",maxRatio:Infinity,color:"#9454a8"}
+];
+const POPULATION_RATING_BY_LABEL=new Map(POPULATION_RATINGS.map(x=>[x.label,x]));
+const POPULATION_RATING_BY_SLUG=new Map(POPULATION_RATINGS.map(x=>[x.slug,x]));
+function rebuildSpeciesIndex(){speciesById=new Map(species.map(sp=>[sp.id,sp]));}
+function speciesByIdGet(id){return speciesById.get(id)||null;}
+function normalizeSpecies(sp={}){
+ if(!sp.id)sp.id=newSpeciesId();
+ sp.name=String(sp.name||"Species"); sp.emoji=String(sp.emoji||"").trim(); sp.referenceSpecies=String(sp.referenceSpecies||"").trim();
+ sp.invasiveExpectedOverride=Number.isFinite(sp.invasiveExpectedOverride)&&sp.invasiveExpectedOverride>0?sp.invasiveExpectedOverride:null;
+ for(const k of ["pop","startPop","expectedPop","capacity","regrowth","survival","reproSurplus","edible","pred"])if(!Number.isFinite(sp[k]))sp[k]=0;
+ sp.pop=Math.max(0,sp.pop);sp.startPop=Math.max(0,sp.startPop);sp.expectedPop=Math.max(0,sp.expectedPop);sp.capacity=Math.max(0,sp.capacity);
+ sp.invasive=!!sp.invasive;sp.graph=sp.graph!==false;sp.prey=String(sp.prey||"");sp.type=sp.type||(sp.survival<=0?"producer":"consumer");
+ return sp;
+}
+function normalizeAllSpecies(){species.forEach(normalizeSpecies);rebuildSpeciesIndex();}
+function snapshotPopulation(snap,sp){
+ const byId=Number(snap?.populations?.[sp.id]); if(Number.isFinite(byId))return Math.max(0,byId);
+ const legacy=Number(snap?.[sp.name]); return Number.isFinite(legacy)?Math.max(0,legacy):0;
+}
+function renderCore(){renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();}
+function renderDiagnosticsPanels(){renderDiagnostics();renderYearlyDiagnostics();}
+function renderAll(){renderCore();renderDiagnosticsPanels();}
+function validateState(context="state"){
+ const ids=new Set();
+ species.forEach(sp=>{if(ids.has(sp.id))console.warn(`[GPC ${context}] duplicate species id`,sp.id);ids.add(sp.id);if(!(sp.pop>=0)&&Number.isFinite(sp.pop))console.warn(`[GPC ${context}] invalid population`,sp.id,sp.pop);});
+ const latest=history.find(h=>h.year===year);if(latest)species.forEach(sp=>{const a=snapshotPopulation(latest,sp),b=latest.populationStates?.[sp.id]?.population;if(Number.isFinite(b)&&Math.abs(a-b)>1e-9)console.warn(`[GPC ${context}] population ledger mismatch`,sp.id,a,b);});
+ Object.keys(storedSpecies).forEach(id=>{if(!speciesByIdGet(id))console.warn(`[GPC ${context}] storage references missing species`,id);});
+}
 
 function defaults(){
  return [
@@ -196,7 +232,7 @@ function defaults(){
 }
 function loadDefaults(){
  species=defaults();
-ensureSpeciesIds();
+normalizeAllSpecies();
  species.forEach(s=>{ if(!Number.isFinite(s.startPop)) s.startPop=s.pop; if(!Number.isFinite(s.expectedPop)) s.expectedPop=s.startPop; });
  resetSim(true);
  renderEditors();
@@ -210,9 +246,37 @@ function resetSim(keep=false){
    s.pop=s.startPop;
  });
  year=0; history=[snapshot()]; lastStats={}; appliedAnalysisRange=null; storedSpecies={};
- renderEditors(); renderState(); draw(); renderPopulationAverages(); renderVisualizationOutput(); renderDiagnostics(); renderYearlyDiagnostics(); renderInterventions();
+ renderEditors(); renderAll();
 }
-function snapshot(){let o={year};species.forEach(s=>o[s.name]=s.pop);return o}
+function populationStateRecord(sp,pop){
+ const population=Math.max(0,Number(pop)||0);
+ const reference=populationReferenceFor(sp);
+ const rating=populationRatingFor(sp,population);
+ return {population,reference:Number.isFinite(reference)?reference:null,ratio:reference>0?population/reference:null,rating};
+}
+function snapshot(){
+ ensureSpeciesIds();
+ let o={year,populations:{},populationStates:{}};
+ species.forEach(sp=>{o.populations[sp.id]=sp.pop;o[sp.name]=sp.pop;o.populationStates[sp.id]=populationStateRecord(sp,sp.pop)});
+ return o;
+}
+function refreshPopulationStateLedger(){
+ ensureSpeciesIds();
+ history.forEach(snap=>{
+   snap.populationStates={};
+   species.forEach(sp=>snap.populationStates[sp.id]=populationStateRecord(sp,snapshotPopulation(snap,sp)));
+ });
+ diagnosticRows.forEach(r=>{
+   const sp=speciesByIdGet(r.speciesId)||species.find(s=>s.name===r.species);
+   if(!sp)return;
+   r.startPopulationState=populationStateRecord(sp,r.start);
+   r.endPopulationState=populationStateRecord(sp,r.end);
+ });
+ invalidateDiagnosticCache();
+}
+function snapshotPopulationState(snap,sp){
+ return snap?.populationStates?.[sp.id]||populationStateRecord(sp,snapshotPopulation(snap,sp));
+}
 function rnd(a,b){return a+Math.random()*(b-a)}
 function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
 
@@ -416,8 +480,13 @@ function stepMonth(annualBreedingPool,monthNo){
    }
    monthDiag[i].end=sp.pop;
  });
+ monthDiag.forEach((r,i)=>{
+   const sp=species[i];
+   r.startPopulationState=populationStateRecord(sp,r.start);
+   r.endPopulationState=populationStateRecord(sp,r.end);
+ });
  diagnosticRows.push(...monthDiag);
- renderDiagnostics();
+ invalidateDiagnosticCache();
 }
 
 function exportSimulation(){
@@ -426,7 +495,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.45",
+   version:"v0.48",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -478,17 +547,18 @@ function importSimulation(data){
    encounterBaseline:x.encounterBaseline==null?Math.max(0,Number(x.startingPopulation)||0):Math.max(0,Number(x.encounterBaseline)||0),
    graph:x.graphEnabled!==false,healthyViz:x.healthyVisualizationBaseline||null};
  });
- ensureSpeciesIds();
+ normalizeAllSpecies();
  globalVizFallback=data.invasiveVisualizationFallback||null;
  storedSpecies=(data.speciesStorage&&typeof data.speciesStorage==="object")?data.speciesStorage:{};
  year=Math.max(0,parseInt(data.simulatedThroughYear,10)||0);
  history=data.populationHistory.map(r=>({...r,year:Number(r.year)||0}));
- diagnosticRows=Array.isArray(data.monthlyDiagnostics)?data.monthlyDiagnostics.map(r=>({...r})):[];
+ diagnosticRows=Array.isArray(data.monthlyDiagnostics)?data.monthlyDiagnostics.map(r=>({...r})):[];invalidateDiagnosticCache();
  const latest=history.find(r=>r.year===year)||history[history.length-1];
- if(latest)species.forEach(sp=>{if(Number.isFinite(Number(latest[sp.name])))sp.pop=Math.max(0,Number(latest[sp.name]));});
+ if(latest)species.forEach(sp=>{sp.pop=snapshotPopulation(latest,sp);});
  const inv=document.getElementById("includeInvasives"); if(inv&&typeof data.includeInvasives==="boolean")inv.checked=data.includeInvasives;
+ refreshPopulationStateLedger();validateState("import");
  renderEditors();refreshAnchor();refreshGraphSpeciesFilter();refreshDiagnosticSpeciesFilters();
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();renderInterventions();
+ renderAll();
  const status=document.getElementById("balanceStatus");
  if(status)status.textContent=legacyMissingEncounter
    ?`Imported ${data.version||"legacy"} session through Year ${year}. This older export did not store Encounter Baselines, so its history is preserved for analysis, but recalibrate before continuing the simulation if you need identical ecology physics.`
@@ -563,35 +633,47 @@ function newSpeciesId(){
  do{id="sp"+(nextSpeciesId++);}while(species.some(s=>s.id===id));
  return id;
 }
-function ensureSpeciesIds(){
- species.forEach(s=>{if(!s.id)s.id=newSpeciesId();});
-}
+function ensureSpeciesIds(){species.forEach(s=>{if(!s.id)s.id=newSpeciesId();});rebuildSpeciesIndex();}
 function speciesDisplay(sp){return sp&&String(sp.emoji||"").trim()?String(sp.emoji).trim():sp?.name||""}
 function speciesNameById(id,fallback=""){
- const s=species.find(x=>x.id===id);return s?speciesDisplay(s):fallback;
+ const s=speciesByIdGet(id);return s?speciesDisplay(s):fallback;
 }
 
-function yearlyRows(){
- const groups=new Map();
- diagnosticRows.forEach(r=>{
-   const sid=r.speciesId||r.species;
-   const key=r.year+"|"+sid;
-   if(!groups.has(key))groups.set(key,{year:r.year,speciesId:sid,species:r.species,start:r.start,end:r.end,foodRequired:0,foodObtained:0,predDeaths:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,months:0});
-   const g=groups.get(key);g.end=r.end;g.foodRequired+=r.foodRequired||0;g.foodObtained+=r.foodObtained||0;g.predDeaths+=r.predDeaths||0;g.producerConsumed+=r.producerConsumed||0;g.naturalDeaths+=r.naturalDeaths||0;g.starvation+=r.starvation||0;g.surviveOnly+=r.surviveOnly||0;g.reproEligible+=r.reproEligible||0;g.births+=r.births||0;g.regrowth+=r.regrowth||0;g.months++;
- });
- return [...groups.values()].map(g=>({...g,surviveOnly:g.months?g.surviveOnly/g.months:0,reproEligible:g.months?g.reproEligible/g.months:0,foodPct:g.foodRequired>0?100*g.foodObtained/g.foodRequired:null})).sort((a,b)=>a.year-b.year||a.species.localeCompare(b.species));
+let diagnosticCache={source:null,length:-1,byYear:new Map(),yearly:[]};
+function invalidateDiagnosticCache(){diagnosticCache.source=null;diagnosticCache.length=-1;}
+function rebuildDiagnosticCache(){
+ if(diagnosticCache.source===diagnosticRows&&diagnosticCache.length===diagnosticRows.length)return;
+ const byYear=new Map(),groups=new Map();
+ for(const r of diagnosticRows){
+   if(!byYear.has(r.year))byYear.set(r.year,[]);
+   byYear.get(r.year).push(r);
+   const sid=r.speciesId||r.species,key=r.year+"|"+sid;
+   if(!groups.has(key))groups.set(key,{year:r.year,speciesId:sid,species:r.species,start:r.start,end:r.end,foodRequired:0,foodObtained:0,predDeaths:0,producerConsumed:0,naturalDeaths:0,starvation:0,surviveOnly:0,reproEligible:0,births:0,regrowth:0,months:0,startPopulationState:r.startPopulationState||null,endPopulationState:r.endPopulationState||null});
+   const g=groups.get(key);g.end=r.end;g.endPopulationState=r.endPopulationState||g.endPopulationState;g.foodRequired+=r.foodRequired||0;g.foodObtained+=r.foodObtained||0;g.predDeaths+=r.predDeaths||0;g.producerConsumed+=r.producerConsumed||0;g.naturalDeaths+=r.naturalDeaths||0;g.starvation+=r.starvation||0;g.surviveOnly+=r.surviveOnly||0;g.reproEligible+=r.reproEligible||0;g.births+=r.births||0;g.regrowth+=r.regrowth||0;g.months++;
+ }
+ const yearly=[...groups.values()].map(g=>({...g,surviveOnly:g.months?g.surviveOnly/g.months:0,reproEligible:g.months?g.reproEligible/g.months:0,foodPct:g.foodRequired>0?100*g.foodObtained/g.foodRequired:null})).sort((a,b)=>a.year-b.year||String(a.species).localeCompare(String(b.species)));
+ diagnosticCache={source:diagnosticRows,length:diagnosticRows.length,byYear,yearly};
 }
+function diagnosticRowsInRange(from,to){
+ rebuildDiagnosticCache();const out=[];
+ for(let y=Math.max(1,from);y<=to;y++){const rows=diagnosticCache.byYear.get(y);if(rows)out.push(...rows);}
+ return out;
+}
+function yearlyRows(){
+ rebuildDiagnosticCache();
+ return diagnosticCache.yearly;
+}
+
 function renderDiagnostics(){
  const d=document.getElementById("diagnostics");if(!d)return;
  if(!hasExplicitAnalysisRange()){d.innerHTML='<p class="note">Set both From year and To year in Analysis Range to load monthly diagnostics.</p>';return;}
  const {from,to}=getAnalysisRange();
  const speciesFilter=selectedDiagnosticSpecies("monthlySpeciesFilter");
- const rows=diagnosticRows.filter(r=>r.year>=Math.max(1,from)&&r.year<=to&&speciesFilter.has(r.speciesId||r.species));
+ const rows=diagnosticRowsInRange(from,to).filter(r=>speciesFilter.has(r.speciesId||r.species));
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate a monthly trace.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
- let h='<table><thead><tr><th>Yr</th><th>Mo</th><th>Species</th><th>Start</th><th>Pred deaths</th><th>Post-pred</th><th>Food req kg</th><th>Food got kg</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Survive only</th><th>Repro eligible</th><th>Births</th><th>Regrowth</th><th>End active</th></tr></thead><tbody>';
- rows.forEach(r=>{const sp=species.find(s=>(s.id||s.name)===(r.speciesId||r.species));const health=sp?populationRating(sp,Number(r.start)||0):"stable";h+=`<tr class="health-${health}"><td>${r.year}</td><td>${r.month}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.predDeaths)}</td><td>${f(r.postPred)}</td><td>${f(r.foodRequired)}</td><td>${f(r.foodObtained)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td><td>${f(r.end)}</td></tr>`});
- d.innerHTML=h+'</tbody></table>';
+ const body=rows.map(r=>{const sp=speciesByIdGet(r.speciesId)||species.find(s=>s.name===r.species);const health=sp?populationRatingSlug(r.startPopulationState?.rating||"—"):"stable";return `<tr class="health-${health}"><td>${r.year}</td><td>${r.month}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.predDeaths)}</td><td>${f(r.postPred)}</td><td>${f(r.foodRequired)}</td><td>${f(r.foodObtained)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td><td>${f(r.end)}</td></tr>`}).join("");
+ d.innerHTML='<table><thead><tr><th>Yr</th><th>Mo</th><th>Species</th><th>Start</th><th>Pred deaths</th><th>Post-pred</th><th>Food req kg</th><th>Food got kg</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Survive only</th><th>Repro eligible</th><th>Births</th><th>Regrowth</th><th>End active</th></tr></thead><tbody>'+body+'</tbody></table>';
 }
 function renderYearlyDiagnostics(){
  const d=document.getElementById("yearlyDiagnostics");if(!d)return;
@@ -601,7 +683,7 @@ function renderYearlyDiagnostics(){
  if(!rows.length){d.innerHTML='<p class="note">Run at least one year or widen the Analysis Range to generate yearly diagnostics.</p>';return;}
  const f=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
  let h='<table><thead><tr><th>Yr</th><th>Species</th><th>Start</th><th>End</th><th>Food %</th><th>Pred deaths</th><th>Producer eaten</th><th>Natural deaths</th><th>Starved</th><th>Avg survive only</th><th>Avg repro eligible</th><th>Births</th><th>Regrowth</th></tr></thead><tbody>';
- rows.forEach(r=>{const sp=species.find(s=>(s.id||s.name)===(r.speciesId||r.species));const health=sp?populationRating(sp,Number(r.start)||0):"stable";h+=`<tr class="health-${health}"><td>${r.year}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.end)}</td><td>${r.foodPct==null?'—':Math.round(r.foodPct)+'%'}</td><td>${f(r.predDeaths)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td></tr>`});
+ rows.forEach(r=>{const sp=speciesByIdGet(r.speciesId)||species.find(s=>s.name===r.species);const health=sp?populationRatingSlug(r.startPopulationState?.rating||"—"):"stable";h+=`<tr class="health-${health}"><td>${r.year}</td><td>${escapeHtml(speciesNameById(r.speciesId,r.species))}</td><td>${f(r.start)}</td><td>${f(r.end)}</td><td>${r.foodPct==null?'—':Math.round(r.foodPct)+'%'}</td><td>${f(r.predDeaths)}</td><td>${f(r.producerConsumed)}</td><td>${f(r.naturalDeaths)}</td><td>${f(r.starvation)}</td><td>${f(r.surviveOnly)}</td><td>${f(r.reproEligible)}</td><td>${f(r.births)}</td><td>${f(r.regrowth)}</td></tr>`});
  d.innerHTML=h+'</tbody></table>';
 }
 function analysisRangeChanged(){renderDiagnostics();renderYearlyDiagnostics();}
@@ -614,9 +696,9 @@ function toggleInvasiveSimulation(){
  // Treat the toggle as an explicit introduction/removal event at the current year.
  // Replace the current-year snapshot so graphs/state immediately reflect the choice.
  if(history.length)history[history.length-1]=snapshot();
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();
+ renderCore();
 }
-function run(n){for(let i=0;i<n;i++)step();renderState();draw();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();renderInterventions()}
+function run(n){for(let i=0;i<n;i++)step();validateState("run");renderAll()}
 
 function storageEntry(sp){return storedSpecies[sp.id]||null}
 function storageCount(sp){const e=storageEntry(sp);return e?Math.max(0,Math.floor(Number(e.count)||0)):0}
@@ -624,7 +706,7 @@ function storedEntries(){ensureSpeciesIds();return species.map(sp=>({sp,count:st
 function preservedEntries(){return storedEntries().filter(x=>x.count>=2)}
 function commitInterventionState(){
  if(history.length){const idx=history.findIndex(h=>h.year===year);const snap=snapshot();if(idx>=0)history[idx]=snap;else history.push(snap)}
- renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderInterventions();
+ validateState("intervention");renderCore();
 }
 function renderInterventions(){
  const slots=document.getElementById("storageSlots");if(!slots)return;ensureSpeciesIds();
@@ -646,17 +728,17 @@ function renderInterventions(){
 }
 function updateCaptureAvailability(){
  const sel=document.getElementById("captureSpecies"),btn=document.getElementById("captureButton"),warn=document.getElementById("captureWarning"),full=document.getElementById("storageFullWarning");if(!sel||!btn)return;
- const sp=species.find(s=>s.id===sel.value);const tooFew=!sp||!(sp.pop>=1);const already=sp&&storageCount(sp)>0;const storageFull=!!sp&&!already&&storedEntries().length>=STORAGE_SLOTS;
+ const sp=speciesByIdGet(sel.value);const tooFew=!sp||!(sp.pop>=1);const already=sp&&storageCount(sp)>0;const storageFull=!!sp&&!already&&storedEntries().length>=STORAGE_SLOTS;
  btn.disabled=tooFew||storageFull;if(warn)warn.classList.toggle("hidden",!tooFew);if(full)full.classList.toggle("hidden",!storageFull);
 }
-function eradicateSelected(){sync();const sel=document.getElementById("eradicateSpecies"),sp=sel&&species.find(s=>s.id===sel.value);if(!sp)return;sp.pop=0;commitInterventionState()}
+function eradicateSelected(){sync();const sel=document.getElementById("eradicateSpecies"),sp=sel&&speciesByIdGet(sel.value);if(!sp)return;sp.pop=0;commitInterventionState()}
 function captureOne(){
- sync();const sel=document.getElementById("captureSpecies"),sp=sel&&species.find(s=>s.id===sel.value);if(!sp)return;
+ sync();const sel=document.getElementById("captureSpecies"),sp=sel&&speciesByIdGet(sel.value);if(!sp)return;
  if(!(sp.pop>=1)){renderInterventions();return}if(storageCount(sp)<=0&&storedEntries().length>=STORAGE_SLOTS){renderInterventions();return}
  sp.pop=Math.max(0,sp.pop-1);const e=storedSpecies[sp.id]||{count:0};e.count=Math.floor(Number(e.count)||0)+1;storedSpecies[sp.id]=e;commitInterventionState();
 }
 function reintroduceSelected(){
- sync();const sel=document.getElementById("reintroduceSpecies"),sp=sel&&species.find(s=>s.id===sel.value);const input=document.getElementById("reintroduceCount");const n=input?Math.max(0,Number(input.value)||0):0;if(!sp||storageCount(sp)<2||!(n>0))return;sp.pop=Math.max(0,sp.pop)+n;commitInterventionState();
+ sync();const sel=document.getElementById("reintroduceSpecies"),sp=sel&&speciesByIdGet(sel.value);const input=document.getElementById("reintroduceCount");const n=input?Math.max(0,Number(input.value)||0):0;if(!sp||storageCount(sp)<2||!(n>0))return;sp.pop=Math.max(0,sp.pop)+n;commitInterventionState();
 }
 function purgeSelected(){const sel=document.getElementById("purgeSpecies"),id=sel&&sel.value;if(!id||!storedSpecies[id])return;delete storedSpecies[id];renderInterventions()}
 
@@ -694,8 +776,9 @@ function sync(){
     if(get("invasive"))sp.invasive=!!val("invasive",sp.invasive);
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
+ rebuildSpeciesIndex();refreshPopulationStateLedger();
 }
-function addSpecies(){sync();species.push({id:newSpeciesId(),name:"New Species",emoji:"",referenceSpecies:"",invasiveExpectedOverride:null,type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false});renderEditors();refreshDiagnosticSpeciesFilters()}
+function addSpecies(){sync();species.push(normalizeSpecies({id:newSpeciesId(),name:"New Species",emoji:"",referenceSpecies:"",invasiveExpectedOverride:null,type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false}));rebuildSpeciesIndex();renderEditors();refreshDiagnosticSpeciesFilters()}
 function refreshCopySpeciesSelect(){
  const sel=document.getElementById("copySpeciesSelect");if(!sel)return;
  ensureSpeciesIds();
@@ -707,7 +790,7 @@ function copySpecies(){
  const sel=document.getElementById("copySpeciesSelect");if(!sel||!sel.value)return;
  const sourceId=sel.value;
  sync();ensureSpeciesIds();
- const source=species.find(s=>s.id===sourceId);if(!source)return;
+ const source=speciesByIdGet(sourceId);if(!source)return;
  const copy={
    id:newSpeciesId(),
    name:source.name+" Copy",
@@ -731,7 +814,7 @@ function copySpecies(){
    graph:source.graph!==false,
     invasive:!!source.invasive
  };
- species.push(copy);
+ species.push(normalizeSpecies(copy));rebuildSpeciesIndex();
  renderEditors();refreshDiagnosticSpeciesFilters();
 }
 function delSpecies(i){sync();species.splice(i,1);renderEditors();refreshDiagnosticSpeciesFilters();resetSim(true)}
@@ -879,7 +962,7 @@ function autoBalance(){
  // Run exactly one native-only burn-in from the old Auto-Balance seed using normal
  // gameplay rules, including the physical <1 consumer extinction floor.
  species.forEach((sp,i)=>{sp.pop=sp.invasive?0:nativeSeed[i];});
- year=0;history=[snapshot()];diagnosticRows=[];lastStats={};
+ year=0;history=[snapshot()];diagnosticRows=[];invalidateDiagnosticCache();lastStats={};
  for(let y=0;y<BURN_IN_YEARS;y++)step(false);
 
  const tail=history.filter(h=>h.year>=TAIL_START);
@@ -933,8 +1016,8 @@ function autoBalance(){
    }
  });
 
- year=0;lastStats={};diagnosticRows=[];history=[snapshot()];storedSpecies={};
- renderEditors();renderState();draw();renderPopulationAverages();renderVisualizationOutput();renderDiagnostics();renderYearlyDiagnostics();renderInterventions();
+ year=0;lastStats={};diagnosticRows=[];invalidateDiagnosticCache();history=[snapshot()];storedSpecies={};
+ renderEditors();renderAll();
 
  const extinctNatives=species.filter(sp=>!sp.invasive && sp.survival>0 && !(sp.startPop>0)).map(sp=>sp.name);
  let lines=["Calibrated native ecosystem from "+anchorName+" Auto-Balance seed = "+fmt(anchorPop)+"."];
@@ -959,12 +1042,12 @@ function renderState(){
  const selectedYear=Math.max(0,Math.min(year,to));
  document.getElementById("year").textContent=selectedYear;
  const snap=history.find(h=>h.year===selectedYear)||history[history.length-1]||{};
- const annual=new Map(yearlyRows().filter(r=>r.year===selectedYear).map(r=>[r.species,r]));
+ const annual=new Map(yearlyRows().filter(r=>r.year===selectedYear).map(r=>[r.speciesId||r.species,r]));
  let tb=document.getElementById("state");tb.innerHTML="";
  species.forEach(sp=>{
-  const st=annual.get(sp.name)||{};
+  const st=annual.get(sp.id)||{};
   let tr=document.createElement("tr");
-  tr.innerHTML=`<td>${esc(speciesDisplay(sp))}</td><td>${fmt(snap[sp.name]||0)}</td><td>${st.foodPct==null?"—":Math.round(st.foodPct)+"%"}</td><td>${fmt(st.reproEligible||0)}</td><td>${fmt(st.births||0)}</td><td>${fmt(st.naturalDeaths||0)}</td><td>${fmt(st.predDeaths||0)}</td><td>${fmt(st.starvation||0)}</td>`;
+  tr.innerHTML=`<td>${esc(speciesDisplay(sp))}</td><td>${fmt(snapshotPopulation(snap,sp))}</td><td>${st.foodPct==null?"—":Math.round(st.foodPct)+"%"}</td><td>${fmt(st.reproEligible||0)}</td><td>${fmt(st.births||0)}</td><td>${fmt(st.naturalDeaths||0)}</td><td>${fmt(st.predDeaths||0)}</td><td>${fmt(st.starvation||0)}</td>`;
   tb.appendChild(tr);
  });
 }
@@ -988,9 +1071,7 @@ function bodyConditionColor(v){
 function eventLevelColor(v){
  return ({None:"#777",Few:"#b07a2a",Normal:"#4f7f58",Many:"#8b5aa8"})[v]||"inherit";
 }
-function ratingColor(r){
- return ({Extinct:"#555",Critical:"#d32f2f",Scarce:"#e58b2a",Stable:"#5c9b62",Abundant:"#4285c5",Overpopulated:"#9454a8"})[r]||"inherit";
-}
+function ratingColor(r){return POPULATION_RATING_BY_LABEL.get(r)?.color||"inherit";}
 function populationReferenceFor(sp){
  if(!sp.invasive)return Math.max(0,Number.isFinite(sp.expectedPop)?sp.expectedPop:sp.startPop);
  if(Number.isFinite(sp.invasiveExpectedOverride)&&sp.invasiveExpectedOverride>0)return sp.invasiveExpectedOverride;
@@ -1004,9 +1085,8 @@ function populationReferenceFor(sp){
 }
 function populationRatingFor(sp,pop){
  const expected=populationReferenceFor(sp);
- if(pop<=0)return "Extinct";
- if(!(expected>0))return "—";
- const ratio=pop/expected; if(ratio<.1)return "Critical"; if(ratio<.5)return "Scarce"; if(ratio<1.5)return "Stable"; if(ratio<2.5)return "Abundant"; return "Overpopulated";
+ if(pop<=0)return "Extinct"; if(!(expected>0))return "—";
+ const ratio=pop/expected; return POPULATION_RATINGS.find(x=>x.maxRatio!==null&&ratio<x.maxRatio)?.label||"Overpopulated";
 }
 function bodyConditionFor(sp,row){
  if((sp.survival||0)<=0)return "—";
@@ -1033,18 +1113,18 @@ function renderVisualizationOutput(){
  const annual=new Map(annualRows.filter(r=>r.year===y).map(r=>[r.speciesId||r.species,r]));
  let h='<table><thead><tr><th>Species</th><th>Population</th><th>Body</th><th>Babies</th><th>Carcasses</th><th>Remains</th></tr></thead><tbody>';
  species.forEach(sp=>{
-   const pop=Math.max(0,Number(snap[sp.name]||0));
+   const pop=snapshotPopulation(snap,sp);
    const row=annual.get(sp.id||sp.name);
    const avgPop=row?Math.max(0,(Number(row.start||0)+Number(row.end||0))/2):pop;
    const baseline=sp.healthyViz||globalVizFallback;
    const babies=row?rateCategory(row.births||0,avgPop,baseline?.births):"—";
    const carcasses=row?rateCategory((row.naturalDeaths||0)+(row.starvation||0),avgPop,baseline?.carcasses):"—";
    const remains=row?rateCategory(row.predDeaths||0,avgPop,baseline?.remains):"—";
-   const rating=populationRatingFor(sp,pop),popColor=ratingColor(rating),body=bodyConditionFor(sp,row);
+   const rating=snapshotPopulationState(snap,sp).rating,popColor=ratingColor(rating),body=bodyConditionFor(sp,row);
    h+=`<tr><td style="color:${popColor}">${esc(speciesDisplay(sp))}</td><td style="color:${popColor}">${rating}</td><td style="color:${bodyConditionColor(body)}">${body}</td><td style="color:${eventLevelColor(babies)}">${babies}</td><td style="color:${eventLevelColor(carcasses)}">${carcasses}</td><td style="color:${eventLevelColor(remains)}">${remains}</td></tr>`;
  });
  h+='</tbody></table>';
- h+=`<div class="small" style="margin-top:12px"><strong>Population:</strong> ${["Extinct","Critical","Scarce","Stable","Abundant","Overpopulated"].map(r=>`<span style="color:${ratingColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
+ h+=`<div class="small" style="margin-top:12px"><strong>Population:</strong> ${POPULATION_RATINGS.map(r=>`<span style="color:${r.color};margin-right:10px">● ${r.label}</span>`).join("")}</div>`;
  h+=`<div class="small" style="margin-top:6px"><strong>Body condition:</strong> ${["Fat","Normal","Thin"].map(r=>`<span style="color:${bodyConditionColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
  h+=`<div class="small" style="margin-top:6px"><strong>Babies / carcasses / remains:</strong> ${["None","Few","Normal","Many"].map(r=>`<span style="color:${eventLevelColor(r)};margin-right:10px">● ${r}</span>`).join("")}</div>`;
  if(y===0)h+='<p class="note">Year 0 has population state only; body condition and annual event outputs begin after the first simulated year.</p>';
@@ -1063,18 +1143,15 @@ function renderPopulationAverages(){
  const last=data[data.length-1].year;
  const rows=species.map(s=>{
    let sum=0,count=0;
-   data.forEach(r=>{const v=Number(r[s.name]);if(Number.isFinite(v)){sum+=v;count++;}});
+   data.forEach(r=>{const v=snapshotPopulation(r,s);if(Number.isFinite(v)){sum+=v;count++;}});
    const avg=count?sum/count:0;
    return `<tr><td>${escapeHtml(speciesDisplay(s))}</td><td>${fmt(s.startPop)}</td><td>${fmt(avg)}</td></tr>`;
  }).join("");
  out.innerHTML=`<p class="note">Average from year ${start} through year ${last} (${data.length} annual snapshots).</p><div class="table-wrap"><table><thead><tr><th>Species</th><th>Starting Population</th><th>Average Population</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function populationRating(sp,pop){
- const label=populationRatingFor(sp,pop);
- return ({Extinct:"extinct",Critical:"critical",Scarce:"scarce",Stable:"stable",Abundant:"abundant",Overpopulated:"overpopulated"})[label]||"stable";
-}
-function ratingLabel(r){return ({extinct:"Extinct",critical:"Critical",scarce:"Scarce",stable:"Stable",abundant:"Abundant",overpopulated:"Overpopulated"})[r]||r}
+function populationRatingSlug(label){return POPULATION_RATING_BY_LABEL.get(label)?.slug||"stable";}
+function ratingLabel(slug){return POPULATION_RATING_BY_SLUG.get(slug)?.label||slug;}
 let appliedTimelineRange=null;
 function getTimelineRange(){
  if(appliedTimelineRange)return {from:appliedTimelineRange.from,to:Math.min(appliedTimelineRange.to,year)};
@@ -1100,7 +1177,7 @@ function draw(){
  species.forEach(sp=>{
    let segments=[],current=null;
    data.forEach((snap,idx)=>{
-     const rating=populationRating(sp,Number(snap[sp.name])||0);
+     const rating=populationRatingSlug(snapshotPopulationState(snap,sp).rating);
      if(!current||current.rating!==rating){
        if(current)segments.push(current);
        current={rating,start:snap.year,end:snap.year,count:1};
@@ -1123,7 +1200,7 @@ function draw(){
    wrap.append(track,transitions);row.append(label,wrap);out.appendChild(row);
  });
 }
-reorderSections();species=defaults();ensureSpeciesIds();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
+reorderSections();species=defaults();normalizeAllSpecies();renderEditors();resetSim(true);refreshAnchor();refreshDiagnosticSpeciesFilters();renderPopulationAverages();renderDiagnostics();renderYearlyDiagnostics();
 </script>
 </body>
 </html>
