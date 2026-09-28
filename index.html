@@ -46,7 +46,7 @@ body.dark{color:#e7ece8;background:#111512}body.dark .sub,body.dark label,body.d
 </style>
 </head>
 <body>
-<div class="row"><h1>GPC Ecosystem Simulator — v0.55</h1><button id="themeToggle" class="theme-toggle" type="button" onclick="toggleTheme()">Dark mode</button></div>
+<div class="row"><h1>GPC Ecosystem Simulator — v0.56</h1><button id="themeToggle" class="theme-toggle" type="button" onclick="toggleTheme()">Dark mode</button></div>
 <p class="sub">Tiny number-crunching ecology lab. No ecosystem was harmed in the making of this prototype. Probably.</p>
 
 <div class="card" id="speciesCard">
@@ -537,7 +537,7 @@ function exportSimulation(){
  const yearly=yearlyRows();
  const payload={
    format:"GPC Ecosystem Simulator Export",
-   version:"v0.55",
+   version:"v0.56",
    exportedAt,
    simulatedThroughYear:year,
    includeInvasives:invasivesEnabled(),
@@ -802,7 +802,21 @@ function reintroduceSelected(){
 }
 function purgeSelected(){const sel=document.getElementById("purgeSpecies"),id=sel&&sel.value;if(!id||!storedSpecies[id])return;delete storedSpecies[id];renderInterventions()}
 
+function populationReferenceSignature(){
+ // Historical population-state labels only need rebuilding when the values that
+ // define population-health references change. Normal runs/interventions should
+ // not pay an O(history + diagnostics) rebuild cost.
+ return species.map(sp=>[sp.id,!!sp.invasive,populationReferenceFor(sp)]);
+}
+function samePopulationReferenceSignature(a,b){
+ if(a.length!==b.length)return false;
+ for(let i=0;i<a.length;i++){
+   if(a[i][0]!==b[i][0]||a[i][1]!==b[i][1]||a[i][2]!==b[i][2])return false;
+ }
+ return true;
+}
 function sync(){
+ const oldPopulationReferences=populationReferenceSignature();
  document.querySelectorAll(".species").forEach((d,i)=>{
    const sp=species[i];
    const get=k=>d.querySelector(`[data-k="${k}"]`);
@@ -836,7 +850,9 @@ function sync(){
     if(get("invasive"))sp.invasive=!!val("invasive",sp.invasive);
    if(get("graph"))sp.graph=!!val("graph",sp.graph);
  });
- rebuildSpeciesIndex();refreshPopulationStateLedger();
+ rebuildSpeciesIndex();
+ const newPopulationReferences=populationReferenceSignature();
+ if(!samePopulationReferenceSignature(oldPopulationReferences,newPopulationReferences))refreshPopulationStateLedger();
 }
 function addSpecies(){sync();species.push(normalizeSpecies({id:newSpeciesId(),name:"New Species",emoji:"",referenceSpecies:"",invasiveExpectedOverride:null,type:"consumer",pop:10,startPop:10,expectedPop:10,capacity:0,regrowth:600,minBirth:1,maxBirth:2,lifespan:10,survival:40,reproSurplus:20,edible:1,pred:5,prey:"",graph:true,invasive:false}));rebuildSpeciesIndex();renderEditors();refreshDiagnosticSpeciesFilters()}
 function refreshCopySpeciesSelect(){
