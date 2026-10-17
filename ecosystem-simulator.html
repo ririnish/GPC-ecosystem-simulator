@@ -43,6 +43,7 @@ label{font-size:.76rem;color:#59645d} label span{display:block;margin-bottom:3px
 /* v0.54 UI pass */
 .theme-toggle{margin-left:auto}.run-custom{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:10px}.run-custom label{width:130px}.branch-controls{margin-top:12px;padding-top:12px;border-top:1px solid #e0e4e1}.current-year-banner{font-weight:750;font-size:.95rem;margin:10px 0 6px}.timeline-pop{display:block;font-weight:500;font-size:.72rem;color:#68736c;margin-top:3px}
 body.dark{color:#e7ece8;background:#111512}body.dark .sub,body.dark label,body.dark .note,body.dark .timeline-transitions,body.dark .storage-progress,body.dark .storage-summary,body.dark .timeline-pop{color:#aab5ad}body.dark .card{background:#1a201c;border-color:#364039;box-shadow:0 2px 8px #0005}body.dark button{background:#252d28;color:#e7ece8;border-color:#536159}body.dark button.primary{background:#e7ece8;color:#17201b;border-color:#e7ece8}body.dark button.danger{color:#ff8f88}body.dark input,body.dark select{background:#151a17;color:#e7ece8;border-color:#536159}body.dark .filter-chip{background:#202722;border-color:#465249}body.dark #diagnostics thead th,body.dark #diagnostics th:nth-child(-n+3),body.dark #diagnostics td:nth-child(-n+3),body.dark #yearlyDiagnostics thead th,body.dark #yearlyDiagnostics th:nth-child(-n+2),body.dark #yearlyDiagnostics td:nth-child(-n+2){background:#1a201c}body.dark th,body.dark td{border-bottom-color:#303932}body.dark .species{border-top-color:#303932}body.dark .timeline-track{background:#202722;border-color:#465249}body.dark .timeline-segment:hover{outline-color:#f0f4f1}body.dark .intervention-box{background:#171c19;border-color:#39443c}body.dark .storage-slot{background:#171c19;border-color:#465249}body.dark .storage-slot.empty{background:#141815;color:#6f7a72}body.dark .status{background:#151a17}body.dark button:disabled{background:#202521;color:#68736c;border-color:#343c36}body.dark .branch-controls{border-top-color:#39443c}
+body.dark .forest-bridge{background:#1b2b22!important;color:#dce9dc!important;border-color:#536d5a!important}
 </style>
 </head>
 <body>
@@ -88,7 +89,14 @@ body.dark{color:#e7ece8;background:#111512}body.dark .sub,body.dark label,body.d
   <input id="importSimulationFile" type="file" accept=".json,application/json" style="display:none" onchange="importSimulationFile(this)">
   <button onclick="resetSim()">Reset</button>
  </div>
- <div class="run-custom"><label><span>Custom years</span><input id="customRunYears" type="number" min="1" step="1" value="25"></label><button type="button" onclick="runCustomYears()">Run custom</button></div>
+ <div class="forest-bridge" style="margin-top:14px;padding:12px;border:1px solid #a5b6a5;border-radius:10px;background:#eaf1e8;color:#243a2b">
+  <strong>Illustrate simulation in the forest</strong>
+  <p style="font-size:.82rem;margin:7px 0">Choose any recorded year. The forest will follow this simulation's annual population statuses as you turn pages. This is a visual representation; forest interactions do not change simulator results.</p>
+  <div class="row"><label style="min-width:130px;flex:0 1 170px"><span>Forest starting year</span><input id="forestStartYear" type="number" min="0" step="1" value="0"></label>
+    <button type="button" class="primary" onclick="openForestFromSimulation()">Open forest at this year →</button></div>
+  <div id="forestBridgeStatus" class="note" style="margin-top:7px"></div>
+</div>
+<div class="run-custom"><label><span>Custom years</span><input id="customRunYears" type="number" min="1" step="1" value="25"></label><button type="button" onclick="runCustomYears()">Run custom</button></div>
  <div class="branch-controls"><div class="graph-controls" style="margin:0"><label><span>Branch simulation from year</span><input id="branchYear" type="number" min="0" step="1" placeholder="e.g. 140"></label><button type="button" onclick="branchFromYear()">Resume from this year</button></div><p id="branchStatus" class="note" style="margin:5px 0 0"></p></div>
  <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.88rem"><input id="includeInvasives" type="checkbox" style="width:auto" checked onchange="toggleInvasiveSimulation()"> Include invasive species in simulation</label>
  <details class="note-toggle"><summary>About simulation behavior</summary><p class="note">“Starting population” is initialization data and Reset restores it. Calibration uses Auto-balance as a seed, then pre-simulates the non-invasive ecosystem to estimate its healthy long-term equilibrium. Ecology now resolves monthly while authoring values stay annual. Producers regenerate edible biomass from habitat capacity rather than surviving producer count. Juveniles are intentionally not modeled yet. Consumer births are distributed across monthly ticks and enter the active population immediately after their birth month, so they can participate in feeding and predation on the following month. A yearly breeding-pool cap keeps those newborns from increasing reproductive eligibility until the following simulated year. Predation resolves before surviving prey feed. Producers use only starting population, carrying capacity, annual regrowth, edible biomass, and predation rating in the editor. Monthly diagnostics expose the math step by step. Food allocation now prioritizes survival before reproduction: basic survival rations are funded first, and only remaining surplus can make animals reproduction-eligible. Reproduction Surplus sets both the extra food cost and the maximum reproductive tendency. Species marked invasive are excluded from calibration. The run-controls checkbox can include or exclude all invasive species from simulation; turning it on explicitly introduces them at their authored Starting Population at the current year, while turning it off removes them from active simulation. Native Expected Population is estimated from the mature pre-invasion ecosystem. After calibration, Year 0 continues from the exact final state of the mature native burn-in rather than reconstructing a fresh ecosystem from averaged populations; the entire native state is rescaled proportionally so the anchor Expected Population matches the authored anchor. Invasive Starting Population remains its authored introduction size. Expected Population is not a cap: populations may overshoot it freely. For prey below its frozen Auto-Balance Encounter Baseline, encounterability declines in proportion to current/baseline abundance, making scarce prey harder for predators to locate before they are eaten to extinction. Consumer populations below one individual are now treated as extinct and set to zero at the end of the monthly tick.</p></details>
@@ -529,6 +537,44 @@ function stepMonth(annualBreedingPool,monthNo){
  });
  diagnosticRows.push(...monthDiag);
  invalidateDiagnosticCache();
+}
+
+
+// Same-origin bridge to the forest prototype. Only annual categorical states are shared.
+// The simulator remains authoritative; no ecological calculations are duplicated in the forest.
+const FOREST_BRIDGE_KEY='gpc_forest_simulation_timeline_v1';
+function openForestFromSimulation(){
+ sync();
+ const input=document.getElementById('forestStartYear');
+ const requested=Number(input.value);
+ const status=document.getElementById('forestBridgeStatus');
+ if(!Number.isInteger(requested)||requested<0||!history.some(h=>h.year===requested)){
+  status.textContent='Choose a year present in the simulation (0–'+year+').';return;
+ }
+ const speciesMap={
+  wolf:'wolf',fox:'fox',rabbit:'rabbit',carrot:'carrot',
+  'killer rabbit':'killer_rabbit'
+ };
+ const paired=species.map(sp=>({sp,key:speciesMap[String(sp.name).trim().toLowerCase()]})).filter(x=>x.key);
+ const missing=['wolf','fox','rabbit','killer_rabbit','carrot'].filter(key=>!paired.some(x=>x.key===key));
+ if(missing.length){status.textContent='Cannot open forest: missing simulator species: '+missing.join(', ');return;}
+ const rows=history.map(snap=>{
+  const states={};
+  for(const {sp,key} of paired){
+   const label=snapshotPopulationState(snap,sp).rating;
+   const slug=POPULATION_RATING_BY_LABEL.get(label)?.slug;
+   // Species without a usable reference cannot be mapped to the six categories.
+   if(!slug){status.textContent='Cannot illustrate '+sp.name+' in year '+snap.year+': population state has no valid reference.';return null;}
+   states[key]=slug;
+  }
+  return {year:snap.year,states};
+ });
+ if(rows.some(row=>!row))return;
+ const packageData={format:'gpc-forest-year-bridge',version:1,startYear:requested,throughYear:year,annual:rows};
+ try{
+  localStorage.setItem(FOREST_BRIDGE_KEY,JSON.stringify(packageData));
+  window.location.href='forest-prototype.html';
+ }catch(err){status.textContent='Could not share years with forest. Use both pages on the same site/browser. '+err.message;}
 }
 
 function exportSimulation(){
