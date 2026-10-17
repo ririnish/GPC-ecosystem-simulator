@@ -396,7 +396,7 @@ function predatorTick(a,dt){
   }
  }
 }
-function drawAnimal(a){if(!a.alive)return;if(a.state==='hidden'){a.el.style.display='none';return;}a.el.style.display='';a.el.classList.toggle('eating',a.state==='eating');a.x=Math.max(25,Math.min(W-25,a.x));a.y=Math.max(110,Math.min(H-15,a.y));const w=a.species==='wolf'?80:a.species==='fox'?65:52,h=a.species==='wolf'?58:a.species==='fox'?48:46;a.el.style.left=(a.x-w/2)+'px';a.el.style.top=(a.y-h)+'px';a.el.classList.toggle('baby',isBaby(a));const speciesScale=a.species==='wolf'?2:a.species==='fox'?1.5:1;a.el.style.transform=`scaleX(${a.face}) scale(${(isBaby(a)?.57:1)*0.5*speciesScale})`;}
+function drawAnimal(a){if(!a.alive)return;if(a.state==='hidden'){a.el.style.display='none';return;}a.el.style.display='';a.el.classList.toggle('eating',a.state==='eating');a.x=Math.max(25,Math.min(W-25,a.x));a.y=Math.max(110,Math.min(H-15,a.y));const w=a.species==='wolf'?80:a.species==='fox'?65:52,h=a.species==='wolf'?58:a.species==='fox'?48:46;a.el.style.left=(a.x-w/2)+'px';a.el.style.top=(a.y-h)+'px';a.el.classList.toggle('baby',isBaby(a));const speciesScale=a.species==='wolf'?1.75:a.species==='fox'?1.5:1;a.el.style.transform=`scaleX(${a.face}) scale(${(isBaby(a)?.57:1)*0.5*speciesScale})`;}
 function wildlifeTick(now){const dt=Math.min(.06,(now-lastFrame)/1000);lastFrame=now;if(!turning){
  // Carrot plants can regrow between meals; enough food remains available as generations multiply.
  for(const c of carrots){if(!c.available&&c.regrow>0){c.regrow-=dt;if(c.regrow<=0){c.available=true;c.el.style.display='';}}}
