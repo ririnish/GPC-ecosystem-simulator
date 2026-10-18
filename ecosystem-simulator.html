@@ -322,6 +322,14 @@ function snapshotPopulationState(snap,sp){
  return snap?.populationStates?.[sp.id]||populationStateRecord(sp,snapshotPopulation(snap,sp));
 }
 function rnd(a,b){return a+Math.random()*(b-a)}
+// Convert an expected fractional population into whole individuals without
+// erasing small mortality/birth probabilities at every monthly step.
+// E.g. 0.993 survivors becomes 1 ~99.3% of the time and 0 ~0.7%.
+function stochasticIndividuals(expected){
+ const value=Math.max(0,Number.isFinite(expected)?expected:0);
+ const whole=Math.floor(value);
+ return whole+(Math.random()<value-whole?1:0);
+}
 function hunt(h,p){ if(h===0&&p===0)return 0; return h/(h+p) }
 function normalizeConsumerPopulation(sp){
  if((sp.survival||0)>0){sp.pop=Math.max(0,Math.round(Number(sp.pop)||0));if(sp.pop<1)sp.pop=0;}
@@ -496,21 +504,28 @@ function stepMonth(annualBreedingPool,monthNo){
      // Each reproducing animal needs r additional survival-rations. At r=0 there
      // is no extra food cost, so food does not further constrain eligibility.
      const foodSupportedEligible=r>0?surplusFood/(survival*r):supported;
-     const eligible=Math.min(desiredEligible,breedingCap,foodSupportedEligible);
-     const surviveOnly=Math.max(0,supported-eligible);
+     // Resolve fractional survival into actual whole individuals. Ordinary rounding
+     // used to resurrect a lone wolf each month: 0.993 became 1 forever. With
+     // stochastic rounding, its annual natural mortality can accumulate over time.
+     const survivors=stochasticIndividuals(supported);
+     // Without individual sex/age tracking, use two surviving individuals as the
+     // minimum possible breeding population. A lone wolf cannot reproduce.
+     const eligible=survivors>=2
+       ?Math.min(desiredEligible,breedingCap,foodSupportedEligible,survivors)
+       :0;
+     const surviveOnly=Math.max(0,survivors-eligible);
      monthDiag[i].starvation=starvation;lastStats[i].starve+=starvation;
      monthDiag[i].surviveOnly=surviveOnly;
      monthDiag[i].reproEligible=eligible;
      lastStats[i].eligible+=eligible/12;
-     const births=(eligible/2)*rnd(sp.minBirth,sp.maxBirth)*dt;monthDiag[i].births=births;
+     const expectedBirths=(eligible/2)*rnd(sp.minBirth,sp.maxBirth)*dt;
+     const births=stochasticIndividuals(expectedBirths);
+     monthDiag[i].births=births;
      lastStats[i].births+=births;
-     // Births recruit immediately after this month’s mortality/feeding resolution.
-     // They become active ecological participants on the next monthly tick, while
-     // annualBreedingPool prevents them from breeding until the next simulated year.
-     // Continuous ecological math resolves within the month, then consumers commit as
-     // discrete whole individuals so display, capture, extinction, and simulation agree.
-     sp.pop=Math.max(0,Math.round(supported+births));
-     if(sp.pop<1)sp.pop=0;
+     // Newborns enter at the end of the monthly step and cannot breed until a
+     // subsequent simulated year. Zero survivors means zero births: extinction
+     // stays permanent unless the player explicitly reintroduces the species.
+     sp.pop=survivors+births;
    }else{
      let growth=0;
      if(sp.capacity>0){
